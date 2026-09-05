@@ -1,0 +1,70 @@
+import type { ActivityEvent, BackupDownload, Client, Commission, Lead, Payment, Provider, ProviderTaskTemplate, RichNote, Service, ServiceAdditionalItem, ServiceProvider, Task, Trip, WorkspaceConfiguration } from '../domain/types';
+import type { WorkspaceSnapshot } from './workspaceSnapshot';
+import type { ManagedRecordRef, RecordImpact } from './recordImpact';
+
+export interface WorkspaceTransaction {
+  getLead(id: string): Promise<Lead | undefined>;
+  getClient(id: string): Promise<Client | undefined>;
+  getTrip(id: string): Promise<Trip | undefined>;
+  getTask(id: string): Promise<Task | undefined>;
+  getService(id: string): Promise<Service | undefined>;
+  getServiceProvider(id: string): Promise<ServiceProvider | undefined>;
+  getServiceAdditionalItem(id: string): Promise<ServiceAdditionalItem | undefined>;
+  getPayment(id: string): Promise<Payment | undefined>;
+  getProvider(id: string): Promise<Provider | undefined>;
+  getProviderTaskTemplate(id: string): Promise<ProviderTaskTemplate | undefined>;
+  getCommission(id: string): Promise<Commission | undefined>;
+  getNote(id: string): Promise<RichNote | undefined>;
+  getEvent(id: string): Promise<ActivityEvent | undefined>;
+  getConfiguration(): Promise<WorkspaceConfiguration>;
+  getRecordImpact(target: ManagedRecordRef): Promise<RecordImpact>;
+  listProviderTaskTemplates(providerId: string): Promise<readonly ProviderTaskTemplate[]>;
+  listCommissionsForServiceProvider(serviceProviderId: string): Promise<readonly Commission[]>;
+  listCommissionsForTrip(tripId: string): Promise<readonly Commission[]>;
+  listTasksForTrip(tripId: string): Promise<readonly Task[]>;
+  putLead(lead: Lead): Promise<void>;
+  putClient(client: Client): Promise<void>;
+  putTrip(trip: Trip): Promise<void>;
+  putService(service: Service): Promise<void>;
+  putProvider(provider: Provider): Promise<void>;
+  putProviderTaskTemplate(template: ProviderTaskTemplate): Promise<void>;
+  putNote(note: RichNote): Promise<void>;
+  putServiceProvider(serviceProvider: ServiceProvider): Promise<void>;
+  putServiceAdditionalItem(item: ServiceAdditionalItem): Promise<void>;
+  putCommission(commission: Commission): Promise<void>;
+  putPayment(payment: Payment): Promise<void>;
+  putTask(task: Task): Promise<void>;
+  putConfiguration(configuration: WorkspaceConfiguration): Promise<void>;
+  putEvents(events: readonly ActivityEvent[]): Promise<void>;
+  deleteRecord(target: ManagedRecordRef): Promise<void>;
+}
+
+export interface WorkspaceRepository {
+  getLead(id: string): Promise<Lead | undefined>;
+  getClient(id: string): Promise<Client | undefined>;
+  getTask(id: string): Promise<Task | undefined>;
+  getProvider(id: string): Promise<Provider | undefined>;
+  getConfiguration(): Promise<WorkspaceConfiguration>;
+  saveConfiguration(configuration: WorkspaceConfiguration): Promise<void>;
+  listLeads(): Promise<readonly Lead[]>;
+  listClients(): Promise<readonly Client[]>;
+  listProviders(): Promise<readonly Provider[]>;
+  listCommissions(): Promise<readonly Commission[]>;
+  listTrips(): Promise<readonly Trip[]>;
+  listServicesForTrip(tripId: string): Promise<readonly Service[]>;
+  listServiceProvidersForService(serviceId: string): Promise<readonly ServiceProvider[]>;
+  listServiceAdditionalItemsForService(serviceId: string): Promise<readonly ServiceAdditionalItem[]>;
+  listNotesForOwner(ownerType: RichNote['ownerType'], ownerId: string): Promise<readonly RichNote[]>;
+  listProviderTaskTemplates(providerId: string): Promise<readonly ProviderTaskTemplate[]>;
+  listTasks(): Promise<readonly Task[]>;
+  listTasksForLead(leadId: string): Promise<readonly Task[]>;
+  listTasksForTrip(tripId: string): Promise<readonly Task[]>;
+  listPaymentsForTrip(tripId: string): Promise<readonly Payment[]>;
+  listEventsForAggregate(aggregateId: string): Promise<readonly ActivityEvent[]>;
+  listBackupDownloads(): Promise<readonly BackupDownload[]>;
+  recordBackupDownload(download: BackupDownload): Promise<void>;
+  dismissBackupReminder(id: string, until: string): Promise<void>;
+  snapshot(): Promise<WorkspaceSnapshot>;
+  replaceSnapshot(snapshot: WorkspaceSnapshot): Promise<void>;
+  transact<T>(work: (tx: WorkspaceTransaction) => Promise<T>): Promise<T>;
+}

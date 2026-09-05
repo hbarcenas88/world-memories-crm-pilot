@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dev-dist/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+__pycache__/
+/Control WM_12_07_2026_Dashboard.xlsx
+/artifacts/
+/outputs/

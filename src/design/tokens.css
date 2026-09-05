@@ -1,0 +1,24 @@
+:root {
+  --wm-blue: #00aeef;
+  --wm-blue-deep: #276bba;
+  --wm-turquoise: #00b3d6;
+  --wm-yellow: #fdb913;
+  --wm-yellow-soft: #f9d565;
+  --wm-orange: #ffa33b;
+  --wm-ink: #152538;
+  --wm-muted: #667588;
+  --wm-line: #dce4ec;
+  --wm-surface: #ffffff;
+  --wm-surface-subtle: #f7fbfe;
+  --wm-radius-sm: 8px;
+  --wm-radius-md: 12px;
+  --wm-shadow: 0 12px 30px rgb(39 107 186 / 9%);
+  --wm-font-ui: Inter, Aptos, Arial, sans-serif;
+  --wm-space-1: 4px;
+  --wm-space-2: 8px;
+  --wm-space-3: 12px;
+  --wm-space-4: 16px;
+  --wm-space-5: 20px;
+  --wm-space-6: 24px;
+  --wm-space-8: 32px;
+}

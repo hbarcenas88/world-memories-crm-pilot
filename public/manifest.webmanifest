@@ -1,0 +1,12 @@
+{
+  "name": "World Memories CRM",
+  "short_name": "World Memories",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#00AEEF",
+  "icons": [
+    { "src": "icons/world-memories-monogram-192.svg", "sizes": "192x192", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/world-memories-monogram-512.svg", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
