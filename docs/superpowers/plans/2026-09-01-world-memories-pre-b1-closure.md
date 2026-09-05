@@ -66,15 +66,19 @@ v11→v13. La revisión visual en la aplicación servida confirmó el logo ofici
 paleta, Dashboard, rail de escritorio y el comportamiento a 100 % y viewport
 equivalente a 200 %; la consola no presentó errores ni advertencias relevantes.
 
-No se usaron datos reales. La revisión de formato de Git sigue siendo evidencia
-limitada mientras el repositorio permanezca completamente sin archivos rastreados.
-La siguiente fase autorizada por la usuaria es normalizar Git y realizar una
-prueba piloto de publicación; no equivale a migrar datos ni a una etiqueta B1.
+No se usaron datos reales. La normalización Git quedó registrada en los commits
+`4c1f511` y `db2a48e`; el Excel original, artefactos y temporales están
+explícitamente ignorados. La prueba piloto se publicó en
+`https://hbarcenas88.github.io/world-memories-crm-pilot/`: GitHub Actions de
+calidad y Pages pasaron para la rama `codex/world-memories-mvp`, y la revisión
+Playwright publicada confirmó HTTP 200, logo oficial, navegación y consola
+limpia. No equivale a una etiqueta B1, migración de datos ni autorización para
+ampliar alcance.
 
 ## Criterio de cierre
 
 Cada bloque exige pruebas proporcionales, typecheck, lint, build PWA, revisión de
 cambios, documentación afectada y preview visual. El cierre total exige además
 E2E, accesibilidad/teclado/zoom 100 % y 200 %, ES/EN, consola limpia, auditoría de
-dependencias y pruebas de respaldo/restauración. `git diff --check` se registrará
-como evidencia limitada mientras el repositorio permanezca sin archivos rastreados.
+dependencias y pruebas de respaldo/restauración. El piloto publicado exige además
+versionado trazable, Actions en verde y comprobación de la URL servida.
