@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LocaleProvider } from '../../src/app/i18n';
 import { TripDetail } from '../../src/features/trips/TripDetail';
+import { formatOperationalDateTime } from '../../src/domain/operationalDate';
 
 vi.mock('@tiptap/react', async () => {
   const React = await import('react');
@@ -290,7 +291,7 @@ describe('TripDetail', () => {
 
     expect(screen.getByRole('heading', { name: 'Historial agregado' })).toBeTruthy();
     expect(screen.getByText('payment recorded')).toBeTruthy();
-    expect(screen.getByText('15/09/2026 09:30')).toBeTruthy();
+    expect(screen.getByText(formatOperationalDateTime('2026-09-15T14:30:00.000Z'))).toBeTruthy();
   });
 
   it('renders the trip workspace controls and unsaved-changes dialog in English without translating captured data', async () => {
