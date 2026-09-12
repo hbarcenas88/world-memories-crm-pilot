@@ -1,8 +1,8 @@
-name: publish pilot to GitHub Pages
+name: publish World Memories CRM to GitHub Pages
 
 on:
   push:
-    branches: [codex/world-memories-mvp]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
