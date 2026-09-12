@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { t, useLocale } from "../../app/i18n";
 import type { Currency, Provider, Service, ServiceProvider } from "../../domain/types";
+import { AmountField } from "../../design/components/AmountField";
 import { OperationalDateField } from "../../design/components/OperationalDateField";
 
 export type ServiceProviderAssignmentValue = Readonly<{
@@ -49,10 +50,12 @@ export function ServiceProviderAssignment({
   const [serviceId, setServiceId] = useState("");
   const [providerId, setProviderId] = useState("");
   const [currency, setCurrency] = useState<Currency | "">("");
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState<number | undefined>();
+  const [isAmountValid, setIsAmountValid] = useState(true);
   const [reservationLocator, setReservationLocator] = useState("");
   const [variableGrossCommissionAmount, setVariableGrossCommissionAmount] =
-    useState("");
+    useState<number | undefined>();
+  const [isVariableGrossCommissionAmountValid, setIsVariableGrossCommissionAmountValid] = useState(true);
   const [customerBalanceDueOn, setCustomerBalanceDueOn] = useState("");
   const [commissionStatus, setCommissionStatus] = useState<ServiceProvider['commissionStatus']>('with_commission');
   const [error, setError] = useState<string>();
@@ -73,19 +76,12 @@ export function ServiceProviderAssignment({
   );
 
   async function assign(allowReactivatedProvider = false): Promise<void> {
-    const parsedAmount = amount.trim() === "" ? undefined : Number(amount);
-    const parsedVariableGross =
-      variableGrossCommissionAmount.trim() === ""
-        ? undefined
-        : Number(variableGrossCommissionAmount);
     if (
       !serviceId ||
       !selectedProvider ||
       !currency ||
-      (parsedAmount !== undefined &&
-        (!Number.isFinite(parsedAmount) || parsedAmount < 0)) ||
-      (parsedVariableGross !== undefined &&
-        (!Number.isFinite(parsedVariableGross) || parsedVariableGross < 0))
+      !isAmountValid ||
+      !isVariableGrossCommissionAmountValid
     ) {
       setError(t("selectServiceProviderCurrency", locale));
       return;
@@ -105,11 +101,11 @@ export function ServiceProviderAssignment({
         serviceId,
         providerId: selectedProvider.id,
         currency,
-        ...(parsedAmount === undefined ? {} : { amount: parsedAmount }),
+        ...(amount === undefined ? {} : { amount }),
         ...(reservationLocator.trim() ? { reservationLocator: reservationLocator.trim() } : {}),
-        ...(parsedVariableGross === undefined
+        ...(variableGrossCommissionAmount === undefined
           ? {}
-          : { variableGrossCommissionAmount: parsedVariableGross }),
+          : { variableGrossCommissionAmount }),
         ...(customerBalanceDueOn ? { customerBalanceDueOn } : {}),
         commissionStatus,
       });
@@ -121,9 +117,11 @@ export function ServiceProviderAssignment({
             }
           : undefined,
       );
-      setAmount("");
+      setAmount(undefined);
+      setIsAmountValid(true);
       setReservationLocator("");
-      setVariableGrossCommissionAmount("");
+      setVariableGrossCommissionAmount(undefined);
+      setIsVariableGrossCommissionAmountValid(true);
       setCustomerBalanceDueOn("");
       setCommissionStatus('with_commission');
     } catch {
@@ -233,7 +231,8 @@ export function ServiceProviderAssignment({
             onChange={(event) => {
               setProviderId(event.target.value);
               setCurrency("");
-              setVariableGrossCommissionAmount("");
+              setVariableGrossCommissionAmount(undefined);
+              setIsVariableGrossCommissionAmountValid(true);
             }}
             value={providerId}
           >
@@ -266,13 +265,11 @@ export function ServiceProviderAssignment({
         </label>
         <label>
           {t("saleAmount", locale)}
-          <input
-            aria-label={t("saleAmount", locale)}
-            inputMode="decimal"
-            min="0"
-            onChange={(event) => setAmount(event.target.value)}
-            step="0.01"
-            type="number"
+          <AmountField
+            errorMessage={t("selectServiceProviderCurrency", locale)}
+            label={t("saleAmount", locale)}
+            onChange={setAmount}
+            onValidityChange={setIsAmountValid}
             value={amount}
           />
         </label>
@@ -291,15 +288,11 @@ export function ServiceProviderAssignment({
           "variable_amount_per_service" && (
           <label>
             {t("expectedGrossCommission", locale)}
-            <input
-              aria-label={t("expectedGrossCommission", locale)}
-              inputMode="decimal"
-              min="0"
-              onChange={(event) =>
-                setVariableGrossCommissionAmount(event.target.value)
-              }
-              step="0.01"
-              type="number"
+            <AmountField
+              errorMessage={t("selectServiceProviderCurrency", locale)}
+              label={t("expectedGrossCommission", locale)}
+              onChange={setVariableGrossCommissionAmount}
+              onValidityChange={setIsVariableGrossCommissionAmountValid}
               value={variableGrossCommissionAmount}
             />
           </label>

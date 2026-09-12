@@ -23,7 +23,7 @@ export async function exportBackup(workspace: WorkspaceSnapshot): Promise<Blob> 
 export async function readBackup(file: Blob): Promise<BackupReadResult> {
   let envelope: BackupEnvelope;
   try { envelope = JSON.parse(await file.text()) as BackupEnvelope; } catch { throw new Error('backup file is not valid JSON'); }
-  if (envelope.format !== 'world-memories-backup' || (envelope.schemaVersion !== 1 && envelope.schemaVersion !== workspaceSnapshotVersion) || !envelope.snapshot) throw new Error('backup schema version is not supported');
+  if (envelope.format !== 'world-memories-backup' || ![1, 2, workspaceSnapshotVersion].includes(envelope.schemaVersion) || !envelope.snapshot) throw new Error('backup schema version is not supported');
   if (envelope.checksum !== await checksum(JSON.stringify(envelope.snapshot))) throw new Error('backup checksum does not match its contents');
   const snapshot = upgradeWorkspaceSnapshot(envelope.snapshot);
   assertWorkspaceSnapshot(snapshot);

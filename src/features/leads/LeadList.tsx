@@ -3,9 +3,17 @@ import { useState } from "react";
 import type { Locale } from "../../app/i18n";
 import { t } from "../../app/i18n";
 import { EmptyState } from "../../design/components/EmptyState";
-import { ArchiveFilterChips } from "../../design/components/ArchiveFilterChips";
+import { ArchiveFilterChips, type ArchiveFilter } from "../../design/components/ArchiveFilterChips";
 import type { Lead } from "../../domain/types";
 import { LeadForm, type LeadFormValue } from "./LeadForm";
+
+export type LeadListFilters = Readonly<{
+  query: string;
+  source: string;
+  status: string;
+}>;
+
+const defaultFilters: LeadListFilters = { query: "", source: "", status: "" };
 
 function formValue(lead: Lead): LeadFormValue {
   return {
@@ -53,6 +61,10 @@ export function LeadList({
   acquisitionSources,
   communicationChannels,
   travelTypes,
+  archiveFilter: controlledArchiveFilter,
+  onArchiveFilterChange,
+  filters: controlledFilters,
+  onFiltersChange,
 }: {
   editingLead?: Lead;
   locale: Locale;
@@ -64,25 +76,29 @@ export function LeadList({
   acquisitionSources?: readonly string[];
   communicationChannels?: readonly string[];
   travelTypes?: readonly string[];
+  archiveFilter?: ArchiveFilter;
+  onArchiveFilterChange?: (filter: ArchiveFilter) => void;
+  filters?: LeadListFilters;
+  onFiltersChange?: (filters: LeadListFilters) => void;
 }) {
-  const [query, setQuery] = useState("");
-  const [source, setSource] = useState("");
-  const [status, setStatus] = useState("");
-  const [archiveFilter, setArchiveFilter] = useState<
-    "active" | "archived" | "all"
-  >("active");
+  const [uncontrolledFilters, setUncontrolledFilters] = useState<LeadListFilters>(defaultFilters);
+  const [uncontrolledArchiveFilter, setUncontrolledArchiveFilter] = useState<ArchiveFilter>("active");
+  const filters = controlledFilters ?? uncontrolledFilters;
+  const setFilters = onFiltersChange ?? setUncontrolledFilters;
+  const archiveFilter = controlledArchiveFilter ?? uncontrolledArchiveFilter;
+  const setArchiveFilter = onArchiveFilterChange ?? setUncontrolledArchiveFilter;
   const label = (key: import("../../app/i18n").TranslationKey) =>
     t(key, locale);
   const filteredLeads = leads.filter(
     (lead) =>
       [lead.name, lead.email, lead.phone, lead.destination].some((field) =>
-        field?.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+        field?.toLocaleLowerCase().includes(filters.query.toLocaleLowerCase()),
       ) &&
-      (source === "" || lead.acquisitionSource === source) &&
-      (status === "" || lead.status === status) &&
-      (archiveFilter === "all" || archiveFilter === "archived"
+      (filters.source === "" || lead.acquisitionSource === filters.source) &&
+      (filters.status === "" || lead.status === filters.status) &&
+      (archiveFilter === "all" || (archiveFilter === "archived"
         ? Boolean(lead.archivedAt)
-        : !lead.archivedAt),
+        : !lead.archivedAt)),
   );
   const sources = [
     ...new Set(leads.map((lead) => lead.acquisitionSource).filter(Boolean)),
@@ -105,16 +121,16 @@ export function LeadList({
               <Search aria-hidden="true" size={19} />
               <input
                 id="lead-search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                value={filters.query}
+                onChange={(event) => setFilters({ ...filters, query: event.target.value })}
                 placeholder={label("leadSearchPlaceholder")}
               />
             </label>
             <select
               aria-label={label("filterBySource")}
               className="toolbar-select"
-              value={source}
-              onChange={(event) => setSource(event.target.value)}
+              value={filters.source}
+              onChange={(event) => setFilters({ ...filters, source: event.target.value })}
             >
               <option value="">{label("allSources")}</option>
               {sources.map((item) => (
@@ -126,8 +142,8 @@ export function LeadList({
             <select
               aria-label={label("filterByStatus")}
               className="toolbar-select"
-              value={status}
-              onChange={(event) => setStatus(event.target.value)}
+              value={filters.status}
+              onChange={(event) => setFilters({ ...filters, status: event.target.value })}
             >
               <option value="">{label("allStatuses")}</option>
               {(Object.keys(leadStatusKeys) as Lead["status"][]).map((item) => (
@@ -157,6 +173,7 @@ export function LeadList({
               {filteredLeads.map((lead) => (
                 <button
                   className="lead-row"
+                  id={`lead-list-record-${lead.id}`}
                   key={lead.id}
                   onClick={() => onSelect(lead)}
                 >

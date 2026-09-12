@@ -22,7 +22,7 @@ describe('usePanelWidth', () => {
     expect(localStorage.getItem('wm.detailPanelWidth')).toBe('560');
 
     fireEvent.click(screen.getByRole('button', { name: 'Restablecer' }));
-    expect(screen.getByRole('status').textContent).toBe('420');
+    expect(screen.getByRole('status').textContent).toBe('350');
     expect(localStorage.getItem('wm.detailPanelWidth')).toBeNull();
   });
 });

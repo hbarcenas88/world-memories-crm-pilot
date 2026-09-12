@@ -1,5 +1,171 @@
 # Estrategia y registro de verificación
 
+## Cierre de aceptación y corrección final — 2026-09-12
+
+| Gate | Evidencia actual | Estado |
+| --- | --- | --- |
+| Unitarias e integración | `artifacts/vitest-final-2026-09-12-corrections.json`: 206 suites / 101 archivos, 434 pruebas, 0 fallos | Pasa |
+| E2E en origen aislado | `npm run test:e2e`: 29/29 flujos, estado final `passed` | Pasa |
+| Tipos, lint, build PWA | `npm run typecheck`, `npm run lint`, `npm run build`; PWA precachea 14 recursos (1,300.61 KiB) | Pasa; dos chunks >500 kB son deuda no bloqueante |
+| Dependencias y diff | `npm audit --omit=dev --audit-level=high`: 0 vulnerabilidades; `git diff --check`: sin error de espacio | Pasa; CRLF de Windows no es trazabilidad de entrega |
+| Visual manual final | La usuaria confirmó el recorrido en Edge real a zoom 100 % y 200 %, con navegación, título único, foco, scroll y ausencia de solapamientos | Pasa manual |
+
+El primer intento de Vitest en sandbox no pudo cargar Vite por `spawn EPERM`; se repitió fuera del sandbox autorizado y produjo el reporte anterior. Es un límite de ejecución de Windows, no un fallo de producto. No se creó commit, merge ni push: la autorización previa de publicar en `hbarcenas88/world-memories-crm-pilot` queda condicionada únicamente a la revisión independiente descrita abajo.
+
+### Protocolo cerrado — Edge real sobre build 2026-09-12
+
+La usuaria confirmó este recorrido manual en **Microsoft Edge** a 100 % y 200 % sobre la build local: Configuración, Leads, Tareas, Calendario, diálogo de impacto y cambio ES/EN; sin solapamientos, recortes ni scroll horizontal global observados. La evidencia manual es distinta de la automatización de viewport y resuelve el gate humano original. La PWA operativa y los datos reales no se modificaron durante la comprobación.
+
+### VER-I-056 — Ajustes finales de Lead y capas transitorias
+
+| Acuerdo | Implementación y prueba | Estado |
+| --- | --- | --- |
+| Selector de lada distinguible de residencia | `CountryPicker` incorpora presentación `phone`; `PhoneField` muestra `País (ISO), +código`, mientras residencia mantiene sólo país. `CountryPicker.test.tsx` y `PhoneField.test.tsx` cubren ambos contratos. | Pasa |
+| Cierre fiable al cambiar de foco | `useDismissibleLayer` centraliza `pointerdown` exterior para selector de país/teléfono, calendario, notificaciones, búsqueda y menú de acciones. `CountryPicker`, `NotificationCenter`, `OperationalDateField`, `GlobalSearch` y `ActionMenu` tienen regresión; las cuatro primeras prueban además que el foco llega al control exterior elegido. Filtros y acordeones no cierran porque son secciones de trabajo persistentes. | Pasa |
+| Geometría de Lead | `.form-grid` alinea controles al inicio; Correo ya no adopta la altura de Nota comercial. `lead-date-range` ocupa una fila propia después de Tipo/Fechas y antes de Presupuesto/Moneda. `LeadForm.test.tsx` y `leads.spec.ts` comprueban orden y altura. | Pasa |
+| Revisión servida | Build aislada `http://127.0.0.1:4214/#/leads`, sin datos reales: opciones telefónicas con `México (MX), +52`, residencia sin lada, clic exterior descarta la lista y rango conocido en la fila correcta. | Pasa |
+
+**Gate que queda:** revisión independiente de sólo lectura con Astra Medium, autorizada expresamente por la usuaria para estas cinco correcciones y una pasada general. Puede detener la integración a `main` ante una preocupación importante. No se repite el recorrido manual 100/200 % ya aprobado.
+
+### Matriz individual UAT-01–27 — comprobación automática actual
+
+Esta matriz sustituye para efectos de reanudación la lectura de tablas históricas agrupadas más abajo. “Pasa automático” no equivale a aceptación visual: todas las filas que dependen de percepción conservan el gate manual de Edge descrito arriba.
+
+| UAT | Acuerdo verificado | Evidencia actual | Estado |
+| --- | --- | --- | --- |
+| 01 | Controles de ancho del panel sin invasión de cabecera | `ResizableDetailPanel`, `recordLayout.test.tsx`, `visual-layout.spec.ts` | Pasa automático; Edge 100/200 pendiente |
+| 02 | Botones alineados, con hueco y reflujo | `ActionRow`, CSS común, `recordLayout.test.tsx`, `visual-layout.spec.ts` | Pasa automático; Edge 100/200 pendiente |
+| 03 | Expediente completo con jerarquía única y breadcrumb | `DetailWorkspace`, `RecordHeader`, `record-workspaces.spec.ts` | Pasa automático; Edge 100/200 pendiente |
+| 04 | Sin cabeceras duplicadas de Proveedor/Tareas/Clientes | `RecordHeader`, `accessibility-shell.test.tsx`, `visual-uat.spec.ts` | Pasa automático; Edge 100/200 pendiente |
+| 05 | Filtros sin `fieldset` disruptivo, con chips y espaciado | `FilterBar`, `FilterChip`, `FilterBar.test.tsx`, `CalendarPage.test.tsx`, `TaskBoard.test.tsx` | Pasa automático; Edge 100/200 pendiente |
+| 06 | Vencimientos de cliente explicados y filtrables | `calendarProjection.ts`, `CalendarPage`, `calendarProjection.test.ts`, `calendar.spec.ts` | Pasa automático; Edge 100/200 pendiente |
+| 07 | Saldo por componente calcula pagos, estados y archivados | `customerBalance`, `paymentDue.test.ts`, `calendarProjection.test.ts` | Pasa automático |
+| 08 | Índice de Configuración por fichas y editor único | `SettingsPage`, `settings-cards.spec.ts`, `SettingsPage.test.tsx` | Pasa automático; Edge 100/200 pendiente |
+| 09 | Idioma persistente y sincronizado shell/Configuración | repositorio de configuración, `configurationPersistence.test.ts`, `settings-cards.spec.ts` | Pasa automático |
+| 10 | Borrador de Configuración protegido ante idioma, hash, navegación y fallo | `useUnsavedChangesGuard`, `SettingsPage.test.tsx`, `settings-cards.spec.ts` | Pasa automático |
+| 11 | Editar, archivar y eliminar son opciones distintas | `RecordActions`, `recordActions.test.tsx`, `delete-records.spec.ts` | Pasa automático |
+| 12 | Eliminación real admite conservar o borrar historial propio | `deleteRecord`, `recordLifecycle.test.ts`, `recordLifecyclePersistence.test.ts`, `delete-records.spec.ts` | Pasa automático |
+| 13 | Impacto resuelve relaciones, incluida Tarea→Comisión | `recordImpact`, `workspaceSnapshot`, `recordImpact.test.ts`, `deletedReferenceResolution.test.ts` | Pasa automático |
+| 14 | Impacto enumera identidad, resultado y eventos sin payload crudo | `ImpactDetails`, `RecordImpactDialog`, `ImpactDetails.test.tsx`, `delete-records.spec.ts` | Pasa automático; Edge 100/200 pendiente |
+| 15 | Archivo activo/archivado/todos se comporta igual en listas | `archiveVisibility`, `archiveVisibility.test.ts`, listas de Cliente/Proveedor | Pasa automático |
+| 16 | Filtros, resultado y foco de Lead se conservan al volver | `LeadList`, `App.tsx`, `filter-context.spec.ts` | Pasa automático |
+| 17 | Acciones de Tarea dependen de estado y evitan acciones inválidas | `TaskBoard`, `TaskDetail`, `taskBoard.test.tsx`, `TaskDetail.test.tsx` | Pasa automático |
+| 18 | Formulario de Tarea espera persistencia y conserva borrador al fallar | `TaskForm`, `taskBoard.test.tsx`, `manual-tasks.spec.ts` | Pasa automático |
+| 19 | Vínculos de Tarea usan contexto legible, no IDs como etiqueta | `TaskBoard`, `TaskForm`, `taskBoard.test.tsx`, `deletedReferenceResolution.test.ts` | Pasa automático |
+| 20 | Fecha DD/MM/YYYY valida entrada, teclado, foco y error | `OperationalDateField`, `OperationalDateField.test.tsx`, `LeadForm.test.tsx` | Pasa automático; Edge 100/200 pendiente |
+| 21 | Hora HH:mm independiente del control regional nativo | `OperationalTimeField`, `operationalTimeField.test.tsx`, `TaskDetail.test.tsx` | Pasa automático |
+| 22 | Actividad traducida y selector de archivo con superficie propia | `activityEventLabel`, `DataBackupsPage`, `accessibility-shell.test.tsx`, `DataBackupsPage.test.tsx` | Pasa automático; Edge 100/200 pendiente |
+| 23 | Menú, tooltip y diálogos sostienen foco, Escape, scroll y confirmación | `ActionMenu`, `Tooltip`, `ConfirmDialog`, sus pruebas unitarias y `delete-records.spec.ts` | Pasa automático; Edge 100/200 pendiente |
+| 24 | Toast, acordeones, stepper y progreso sólo en procesos aplicables | `ToastRegion`, `AccordionSection`, `ProcessStepper`, `OperationProgress` y sus pruebas | Pasa automático; Edge 100/200 pendiente |
+| 25 | Formularios poblados mantienen controles y acciones legibles | CSS común, `recordLayout.test.tsx`, `accessibility-shell.test.tsx`, `visual-layout.spec.ts` | Pasa automático; Edge 100/200 pendiente |
+| 26 | Vacíos mencionan creación manual real y no importación inexistente | `ClientList`, `ProviderList`, `accessibility-shell.test.tsx`, `visual-uat.spec.ts` | Pasa automático |
+| 27 | Formato operativo fijo y contradicción histórica documentada | PRD REQ-119/120, DEC-075–077, `OperationalDateField.test.tsx`, `visual-uat.spec.ts` | Pasa automático; Edge 100/200 pendiente |
+
+## Cierre automático actualizado — 2026-09-11
+
+| Gate | Evidencia reciente | Estado |
+| --- | --- | --- |
+| Unitarias e integración | `artifacts/vitest-final-2026-09-11.json`: 206 archivos, 430 pruebas, 0 fallos | Pasa |
+| E2E en origen aislado | `npm run test:e2e`: 28 flujos; `test-results/.last-run.json` declara `passed` | Pasa |
+| Tipos, lint, build PWA | `npm run typecheck`, `npm run lint`, `npm run build`; PWA precachea 14 recursos (1,299.78 KiB) | Pasa; advertencia no bloqueante por chunks >500 kB |
+| Dependencias y diff | `npm audit --omit=dev --audit-level=high`: 0 vulnerabilidades; `git diff --check`: sin error de espacio | Pasa; avisos CRLF son del checkout Windows, no trazabilidad de entrega |
+| Visual manual final | Plan visual, Tarea 6.1, exige Edge real a 100 % y 200 %, con control de navegación, título único, solapamientos, foco y scroll | **Pendiente bloqueante de publicación** |
+
+**Regla de publicación:** el remoto configurado es `hbarcenas88/world-memories-crm-pilot` y el árbol correcto sigue sin versionar en `codex/world-memories-mvp`. No crear commit, merge ni push a `main` hasta que la evidencia manual anterior quede registrada y no aparezca un fallo visual bloqueante. La autorización de publicación ya existe, pero está condicionada al cierre completo del plan.
+
+**Regresión posterior al corte:** `SettingsPage.test.tsx` añade la carga de una configuración persistida después de la primera pintura. Solo sincroniza el borrador cuando no existe edición local, evita una falsa guarda de navegación y, tras Guardar, toma el valor confirmado como nueva base. La prueba de tarjetas de Configuración siguió pasando 7/7; el cierre automático anterior se repitió después.
+
+## Evidencia PRE-12–17 — 2026-09-11 (parcial, no habilita publicación)
+
+**Estado de handoff para Tierra High:** el [complemento de reanudación](docs/superpowers/plans/2026-09-10-prepublication-addendum.md) enumera por cola los contratos, archivos y pruebas que aún faltan. No sustituye evidencia: A1/PRE-01–04, A2/PRE-11, B2/PRE-15 y C1/PRE-16–17 tienen corrección dirigida, pruebas y verificación local; la pasada transversal sigue abierta. PRE-05 ahora conserva búsqueda, origen, estado y archivo al volver de un Lead completo (`filter-context.spec.ts`, 2/2); queda foco/scroll y la matriz de los otros siete expedientes. B1/PRE-12/14 ya tiene round-trip y E2E de Lead. La siguiente implementación es C2, luego bordes B1 y D. El orden evita repetir regresiones verdes y evita tratar una corrección local como revisión transversal.
+
+### Evidencia A1 / PRE-01–04 — Configuración (2026-09-11)
+
+| Criterio | Método / evidencia | Resultado y límite |
+| --- | --- | --- |
+| Campo de alta simétrico y usable a zoom alto | `settings-cards.spec.ts` mide un viewport de 635 px equivalente a 200 %; el test primero falló con input de 23 px y luego pasó con input/botón de 44 px, bordes alineados y sin `overflow-x`. | Pasa. La corrección reutiliza la superficie de formulario; no añade sombra, tarjeta ni cambio estético no aprobado. |
+| Estado de catálogo dentro de la fila | La E2E mide la columna `.toggle-field` frente a etiqueta y fila a 100 %. | Pasa. Aún falta la inspección visual de los cinco catálogos en el cierre D. |
+| Borrador, idioma y navegación | `settings-cards.spec.ts` (7/7) cubre shell/hash, descartar y editar→ES/EN→seguir→guardar→navegar; `SettingsPage.test.tsx` conserva error de persistencia con borrador legible. | Pasa dirigido. No generaliza todavía la guarda a todo editor del CRM. |
+| Preview local actual | Servidor aislado actual confirmó a 100 % input y botón de 44 px, línea base idéntica y sin desbordamiento horizontal. La pestaña previa en 4175 servía CSS PWA cacheado de un servidor cerrado; se descartó como evidencia. | Pasa a 100 %; 200 % se cubre por geometría E2E. |
+
+### Evidencia C1 / PRE-16–17 — Ayudas y superficies de campo (2026-09-11)
+
+| Criterio | Método / evidencia | Resultado y límite |
+| --- | --- | --- |
+| Ayuda de impacto legible | `delete-records.spec.ts` abre la ayuda del diálogo real de eliminación a 635 px; comprueba texto de orientación, portal visible y rectángulo completo entre márgenes de 8 px. | Pasa. El portal evita el recorte del modal; Escape y ARIA siguen cubiertos unitariamente por `Tooltip.test.tsx`. |
+| Inventario de áreas de texto | `LeadForm` y `ClientForm` usan `form-grid`; `ProviderDetail` y nota familiar de Viaje usan `field-label`; se detectaron nota de diferencia de Comisión y nota de cancelación de Lead sin superficie completa. | Corregidas sólo las dos excepciones mediante reglas de `conversion-form` y `detail-section`; no se alteran notas ni valores capturados. |
+| Superficie de nota de cancelación | E2E mide borde sólido de 1 px, mínimo 96 px y `resize: vertical`; primero falló con mínimo 0 y redimensionamiento bilateral, luego pasa. | Pasa dirigido. Queda inspección transversal ES/EN/paneles para C1/D. |
+
+### Inventario PRE-15 — controles numéricos antes de cambiar UI (2026-09-11)
+
+| Clasificación | Controles revisados | Regla de este tramo |
+| --- | --- | --- |
+| **Dinero: convertir a `AmountField`** | Anticipo de conversión de Lead (`LeadConversionForm`); importe de venta y comisión bruta variable de un componente (`ServiceProviderAssignment`); pago nuevo y corrección de pago de Cliente (`CustomerPaymentPanel`); corrección desde expediente de Pago (`PaymentDetail`); importe de concepto adicional de Viaje (`TripDetail`); importe recibido de Comisión (`CommissionPaymentDialog`). | Edición con coma de miles/punto decimal, validación accesible, almacenamiento como `number` sin separadores, sin mutar los importes ya capturados. Cada superficie necesita regresión propia y conservará su moneda/confirmación actual. |
+| **Tasa: no convertir** | Tasa de referencia del Viaje (`TripDetail`); tasa propia de proyección de Comisión (`CommissionDetail`). | Mantener `type=number`, paso de cuatro decimales y semántica de tasa. `AmountField` redondearía/comunicaría erróneamente un importe. |
+| **Porcentaje: no convertir** | Porcentaje bruto estándar de Proveedor (`ProviderDetail`). | Mantener precisión decimal y semántica porcentual; no aplicar agrupación monetaria. |
+| **Conteo/desplazamiento: no convertir** | Adultos/niños de Lead (`LeadForm`); días de término de Comisión y días/meses de plantilla de Proveedor (`ProviderDetail`, `ProviderTaskTemplates`). | Mantener controles numéricos enteros y sus límites actuales. |
+
+**Orden de implementación obligatorio:** comenzar por `ServiceProviderAssignment`, porque recibe ambos importes y no depende de otra superficie. Escribir una regresión roja por presentación/validación y por payload numérico; después cambiar el componente, ejecutar su prueba dirigida, typecheck y lint. Repetir para cada fila de dinero. No cambiar los campos de tasa, porcentaje o conteo por proximidad visual.
+
+**Ejecución parcial PRE-15 — 2026-09-11:** rojo funcional y verde dirigido registrados para `AmountField` (3), `ServiceProviderAssignment` (9), `LeadConversionForm` (4), `CommissionPaymentDialog` (5), `CustomerPaymentPanel` (9), `PaymentDetail` (2) y `TripDetail` (16). Las regresiones comprueban formato de edición, validación y número enviado al contrato; `PaymentDetail` ajusta la expectativa histórica de `275` a `275.00`, que es la presentación monetaria aprobada tras perder foco. Una primera corrida completa de `TripDetail` agotó el tiempo en dos pruebas no relacionadas; ambas pasaron de forma aislada y el archivo completo se repitió con 16/16, por lo que no se registró un defecto reproducible. El conjunto dirigido posterior terminó con **8 archivos / 56 pruebas**, typecheck y lint verdes. `backupRestore.test.ts` añade round-trip de decimales en venta, pago, concepto adicional y Comisión, y demuestra que el sobre JSON guarda/restaura `number`, nunca un string localizado. La E2E de Chromium añade teclado real: `1234.56` aparece como `1,234.56` y persiste como `1234.56`; la lectura sin agrupación observada antes en la vista previa provino de inyección de texto, no de una interacción de usuario reproducible. Falta la inspección visual transversal a 100/200 % y los gates restantes del complemento; PRE-15 no está cerrado ni habilita publicación.
+
+## Evidencia PRE-09 / PRE-11 — 2026-09-10 (parcial, no habilita publicación)
+
+| ID | Criterio cubierto | Método / evidencia reciente | Resultado y límite |
+| --- | --- | --- | --- |
+| PRE-09 | No registrar ni bloquear por una descarga que falla | `tests/unit/DataBackupsPage.test.tsx` (6): JSON/Excel, doble acción, fallo y recuperación; typecheck y lint | Pasa en la superficie. Falta la pasada integrada de restauración posterior en el cierre E. |
+| PRE-11 | Detectar una compilación posterior en el mismo origen y exigir respaldo ante cambio declarado de esquema | `tests/e2e/pwa.spec.ts` (3): segunda build con versión de snapshot 3→4, origen local aislado, manifiesto no precacheado, aviso visible, botón de aplicar deshabilitado, acceso a Datos y respaldo y habilitación después de solicitar descarga; `tests/unit/updatePrompt.test.tsx` (6) incluye borrador de Configuración que impide aplicar hasta descartar; 2026-09-11 | Pasa para alerta, salvaguarda, respaldo solicitado y borrador. Aún faltan Posponer/reofrecer y un fallo explícito de respaldo antes del dictamen PWA completo. |
+
+`world-memories-update.json` queda fuera del precache y declara solamente la versión de snapshot. Si falta o no se puede leer, el comportamiento es conservador: exige respaldo. No se publicó ni se usaron datos reales.
+
+| ID | Alcance verificado | Evidencia reciente | Estado y límite |
+|---|---|---|---|
+| PRE-12 | País de residencia filtrable offline | `CountryPicker.test.tsx`: México/Mexico, teclado, Escape y valor histórico; `backupRestore.test.ts` (7): round-trip Dexie/JSON de `MX` y valor histórico literal | Implementado en Lead/Cliente. Falta E2E transversal y caso de fallo de persistencia. |
+| PRE-14 | Lada internacional independiente | `PhoneField.test.tsx`; Lead/Cliente/Proveedor dirigidos; `backupRestore.test.ts` (7): `+50760000000` y teléfono histórico | Implementado. Falta caso de prefijo compartido, E2E y fallo de persistencia. |
+| PRE-13 | Correo de forma básica accesible | `contactValidation`, `LeadForm`, `ClientForm`, `ProviderDetail` | Implementado para entradas nuevas; no comprueba buzón ni resuelve aún el caso de histórico inválido editado en otro campo. |
+| PRE-15 | Presupuesto con coma/punto y valor numérico | `operationalNumber`, `AmountField`, `LeadForm` | Implementado solo para Presupuesto de Lead; falta extender por contrato a otros importes y probar respaldo. |
+| PRE-16 | Tooltip legible fuera de clipping | `Tooltip.test.tsx`: foco, Escape y portal de viewport | Implementado unitariamente; falta inspección de diálogo/zoom real. |
+| PRE-17 | Textarea/pickers de campo común | `global.css`, formularios dirigidos | Base aplicada; falta inventario visual de las superficies identificadas. |
+
+Resultado consolidado del tramo: 9 archivos / 51 pruebas dirigidas, `npm run typecheck`, `npm run lint` y `npm run build` pasaron el 2026-09-10. Build PWA: 15 entradas precacheadas (1,295.04 KiB). Vite advierte chunks por encima de 500 kB; es deuda de rendimiento, no aprobación de publicación. No se hicieron pruebas E2E, restore ni inspección visual nueva en este tramo. No hubo datos reales, commit, push ni despliegue.
+
+## Revisión correctiva de VER-I-055 — 2026-09-10
+
+**PRE-11, avance parcial (2026-09-10):** `tests/unit/AppRootUpdate.test.tsx` reprodujo primero el fallo (actualización ejecutada al notificar) y quedó verde al almacenar la función mediante wrapper. `tests/unit/pwa.test.ts` comprueba la lectura conservadora del manifiesto y que `update(true)` se espera; `updatePrompt.test.tsx` cubre el mensaje localizado de fallo. `tests/e2e/pwa.spec.ts` comprueba una segunda build real en un único origen aislado. Resultado dirigido: **15 pruebas**; typecheck, lint y build pasan. Siguen pendientes reoferta tras posponer, respaldo/borrador y revisión visual; por ello no convierte el dictamen en GO.
+
+**PRE-03 y PRE-13, avance parcial (2026-09-10):** `SettingsPage.test.tsx` verifica edición explícita, ID estable y rechazo de etiqueta duplicada/vacía (**9 pruebas**). `contactValidation.test.ts`, `LeadForm.test.tsx`, `ClientForm.test.tsx` y `ProviderDetail.test.tsx` verifican formato de correo opcional/trim y bloqueo de un correo inválido en los tres formularios (**28 pruebas en conjunto**). Falta asociar en Proveedor el error al control con `aria-invalid`/`aria-describedby`, y no se acreditan guardas de navegación de Configuración. PRE-12/14–17 continúan pendientes.
+
+**Ampliación documental, sin resultado de prueba nuevo para PRE-12/14–17:** [complemento PRE-12–17](docs/superpowers/plans/2026-09-10-prepublication-addendum.md). PRE-13 tiene la cobertura parcial descrita arriba; país y teléfono carecen de los pickers solicitados, presupuesto no tiene parser/formateador de agrupación y la causa exacta de la ayuda ilegible requiere reproducción visual. Esos pendientes no cuentan como nuevos tests aprobados.
+
+**Dictamen vigente: NO GO de publicación; cobertura parcial.** [PRE-01–11](docs/qa/2026-09-10-prepublication-review.md) contradicen el cierre universal anterior. Los resultados concretos de pruebas del 2026-09-08 se conservan como históricos, pero su matriz no acredita todos los criterios del plan. En particular, las pruebas del aviso PWA omiten `AppRoot`, donde la función recibida se pasa directamente al setter React y puede ejecutar la actualización sin confirmación; la prueba visual no recorre todos los módulos en EN ni cambia realmente los tres anchos del panel. Se requiere integración de actualización con dos builds aislados, correcciones y nueva matriz completa. Esta revisión fue de código/documentación y capturas aportadas; Edge agotó el tiempo al adquirir pestaña. No se ejecutaron suites ni se certificaron renders nuevos.
+
+## VER-I-055 — Cierre automático de UAT visual e interacción (2026-09-08)
+
+**Estado: pasa automáticamente; pendiente de comprobación manual de zoom real.** La restauración no estaba bloqueada: el E2E esperaba una cadena distinta del mensaje localizado. `tests/integration/backupRestore.test.ts` (6/6) y `tests/e2e/backup-restore-flow.spec.ts` confirman ahora descarga, validación, segunda confirmación, reemplazo y lectura posterior de un respaldo JSON sintético. No se modificó la transacción Dexie al no existir fallo de repositorio.
+
+| Hallazgos | Evidencia implementada | Prueba/resultado |
+|---|---|---|
+| UAT-01–04, UAT-25 | `RecordHeader`, `ActionRow`, `ResizableDetailPanel`, cabeceras sin duplicación y reflujo de acciones/campos | `recordLayout.test.tsx`, `visual-layout.spec.ts`, `record-workspaces.spec.ts`; pasa |
+| UAT-05–07, UAT-15–16 | `FilterBar`, chips, predicado compartido, contexto del Lead preservado y proyección de saldos/archivados | `FilterBar.test.tsx`, `archiveVisibility.test.ts`, `calendarProjection.test.ts`, `filter-context.spec.ts`, `calendar.spec.ts`; pasa |
+| UAT-08–10 | Índice de seis fichas, editor único, Preferencias/formato y guardado de idioma | `SettingsPage.test.tsx`, `configurationPersistence.test.ts`, `settings-cards.spec.ts`; pasa |
+| UAT-11–14 | Impacto detallado, referencia histórica, segunda confirmación y eventos propios opcionales | `recordImpact.test.ts`, `recordActions.test.tsx`, `recordLifecycle.test.ts`, `recordLifecyclePersistence.test.ts`, `backupRestore.test.ts` y `delete-records.spec.ts`; pasa |
+| UAT-17–21 | Tareas por estado, formulario esperado, reprogramación, HH:mm y fecha operacional accesible | `taskBoard`, `TaskDetail`, `OperationalDateField`, `operationalTimeField`, `manual-tasks.spec.ts`; pasa |
+| UAT-22–24 | Etiquetas de actividad, selector de archivo, diálogo/foco, toast, acordeones, ayuda, steppers y progreso real | `accessibility-shell.test.tsx`, `confirmDialog.test.tsx`, `AccordionSection.test.tsx`, `ContextHelp.test.tsx`, `processStepper.test.tsx`, `operationProgress.test.tsx`; pasa |
+| UAT-26–27 | Estados vacíos corregidos y formato operativo fijo/documentado | `accessibility-shell`, `visual-uat.spec.ts`, PRD REQ-119/120 y DEC-075–077; pasa |
+
+Evidencia de cierre ejecutada: `npm test` **93/370**, `npm run test:e2e` **17/17**, `npm run typecheck`, `npm run lint`, `npm run build`, `npm audit --omit=dev --audit-level=high` (0 vulnerabilidades) y `git diff --check` (pasa; avisos CRLF sin diferencia funcional). Vista previa PWA aislada en Edge: Dashboard, Configuración y Preferencias/formato; consola de la pestaña sin errores/advertencias. Se capturaron y verificaron en E2E datos sintéticos a 1440×900, 1280×800 y 900×700, con ES/EN, encabezado único y sin overflow global.
+
+**Excepción abierta, no sustituible:** el conector de Edge expone solo viewport, no zoom del navegador. Los atajos no modificaron la escala medible. Falta comprobar manualmente 100 % y 200 % en Edge con el indicador visible antes de certificar el cierre visual o publicar.
+
+## VER-I-054 — Auditoría visual posterior al piloto (2026-09-05)
+
+**Dictamen: aceptación visual reabierta, correcciones pendientes.** VER-I-052/053 conservan sus resultados técnicos y de publicación, pero no acreditan cobertura visual universal. El diagnóstico `docs/qa/2026-09-05-visual-audit.md` registra UAT-01–27, evidencias de pantalla/código y riesgos no reproducidos. El plan `docs/superpowers/plans/2026-09-05-world-memories-visual-interaction-closure.md` está propuesto para aprobación, no ejecutado.
+
+- Edge: diez rutas visibles, Lead lateral/completo, altas de Cliente/Proveedor/Tarea canceladas, calendario emergente, campana vacía, Configuración normal y 900 × 700. No se modificaron registros ni se ejecutaron importaciones/restauraciones. Consola consultada sin errores/advertencias en ese momento.
+- Prueba dirigida fresca: `npm test -- tests/unit/recordImpact.test.ts tests/unit/recordActions.test.tsx tests/unit/taskBoard.test.tsx tests/unit/calendarProjection.test.ts tests/integration/recordLifecyclePersistence.test.ts`: **5 archivos / 22 pruebas pasan**, duración3.14 s. Primer arranque bloqueado por `spawn EPERM`, resuelto mediante ejecución autorizada.
+- No certifica: zoom real200 (atajos sin cambio medible), UAT completa EN, estados poblados de todos los expedientes ni suite completa/E2E/build/axe nuevos. Los controles geométricos y la nueva eliminación necesitan pruebas adicionales descritas por oleada.
+- Pendientes de aceptación: geometría/cabeceras (Oleada1), filtros/fichas (Oleada2), eliminación con compatibilidad y rollback (Oleada3), tareas/expedientes/patrones (Oleada4), calendario/procesos (Oleada5), regresión integral visual/funcional (Oleada6).
+
 ## Propósito
 
 Este documento enlaza requisitos, criterios, métodos y evidencia. Los criterios de producto se incorporarán conforme se aprueben; por ahora cubre las puertas de descubrimiento.
@@ -66,6 +232,8 @@ Este documento enlaza requisitos, criterios, métodos y evidencia. Los criterios
 | VER-I-051 | Bloque 3 parcial — expedientes y resúmenes operativos | Vitest + Testing Library + TypeScript + build PWA | `tests/unit/LeadForm.test.tsx`, `tests/unit/LeadDetail.test.tsx`, `tests/unit/leadUseCases.test.ts`, `tests/unit/ClientForm.test.tsx`, `tests/unit/ClientDetail.test.tsx`, `tests/unit/TripList.test.tsx`, `tests/unit/ProviderList.test.tsx`, `tests/unit/CommissionBoard.test.tsx`, `tests/unit/CommissionDetail.test.tsx`; regresión completa de 74 archivos / 243 pruebas, typecheck, lint, build PWA y `git diff --check` del 2026-09-04. | En curso: Lead enriquecido/cancelable, Cliente/Familia con miembros editables y edad derivada, filtros de Viaje/Proveedor y Comisión multimoneda con navegación contextual. No cierra el bloque: localizador de reserva, conceptos adicionales y tasa de referencia requieren extensión de contrato, migración/backup y pruebas de compatibilidad posteriores. |
 | VER-I-052 | Cierre correctivo pre-B1 — expedientes, operación y compatibilidad | Vitest + Testing Library + fake-indexeddb + Playwright + revisión servida | 78 archivos / 282 pruebas con `npm test`; `npm run typecheck`, `npm run lint`, `npm run build` y 10 E2E secuenciales en verde el 2026-09-05. Incluye `tripWorkspace`, `commissionProjectionRate`, `cancelTrip`, `CommissionDetail`, Dashboard, búsqueda, migración v11→v13, CSV/Excel y respaldo JSON v1/v2. Vista servida `127.0.0.1:4174` a 100 % y viewport equivalente a 200 %, consola sin errores/advertencias relevantes, teclado/axe E2E, PWA offline y `npm audit --omit=dev --audit-level=high` con 0 vulnerabilidades. | **Pasa.** Configuración, idioma persistente y formatos operativos fijos; tareas y plantillas; expedientes, cancelaciones y tasas trazables; Dashboard/búsqueda/calendario/alertas/rutas; y compatibilidad/respaldo quedan verificados dentro del MVP. No usó datos reales. `git diff --check` sigue siendo evidencia limitada hasta normalizar Git; esta verificación no crea etiqueta B1. |
 | VER-I-053 | Versionado y prueba piloto de GitHub Pages | Git + GitHub Actions + Playwright contra URL publicada | Commits `4c1f511` y `db2a48e`; repositorio `hbarcenas88/world-memories-crm-pilot`; Actions de calidad y despliegue del commit corregido en verde; Playwright contra `https://hbarcenas88.github.io/world-memories-crm-pilot/` recibió HTTP 200, título `World Memories CRM`, logo oficial, navegación completa y consola sin errores. | **Pasa como piloto público.** Solo la rama `codex/world-memories-mvp` está autorizada para el entorno Pages. El Excel original, artefactos y temporales permanecen excluidos. No se creó etiqueta B1 ni se publicaron datos operativos. |
+| VER-I-054 | Corrección visual/interacción: borradores, fecha/hora, eliminación histórica y controles de teclado | Vitest + fake-indexeddb + TypeScript + lint + inspección Edge local | Ejecuciones dirigidas del 2026-09-05/06: `recordImpact`/`RecordImpactDialog`/`recordLifecycle`/migración IndexedDB/JSON (23 pruebas), `ConfirmDialog` + guardas de borrador Lead/Cliente/Tarea/Viaje (43), fecha/hora (14), `ActionMenu`/`Tooltip` (4), Tareas/Viajes (19), y 20 pruebas de Tareas/Calendario más 17 de ciclo de vida/reconciliación. Estas últimas prueban que un fallo de reprogramación conserva el borrador, que los componentes liquidados/cancelados/archivados no proyectan vencimientos, que no se mezclan monedas, y que una tarea automática eliminada no se recrea. Typecheck y lint verdes. Edge local `127.0.0.1:4179` mostró filtros compactos de Tareas y las fichas de Configuración; consola sin advertencias/errores. La prueba de diálogo cubre foco seguro, Tab/Shift+Tab, Escape, bloqueo durante persistencia y un fallo que mantiene la confirmación abierta con error. | **En curso, evidencia parcial.** La referencia histórica v14/JSON v3 preserva relaciones y eventos opcionales sin cascada; los diálogos comunes confirman dos veces donde corresponde, esperan la persistencia y muestran elementos afectados. Faltan cobertura de todas las superficies históricas, QA visual poblado, E2E total y regresión final; no autoriza publicación ni B1 por sí sola. |
+| VER-I-055 | Pausa reproducible — confirmaciones preventivas, filtros y primera relación histórica | Vitest + fake-indexeddb + TypeScript + lint + Edge local | 2026-09-07: `tests/unit/PaymentDetail.test.tsx`, `CustomerPaymentPanel.test.tsx` y `confirmDialog.test.tsx`: 3 archivos/11 pruebas en verde; `taskBoard`: 17 pruebas en verde antes del tramo histórico. Se creó la regresión roja de Viaje superviviente con Cliente eliminado y se verificó después con `tests/integration/recordLifecyclePersistence.test.ts`, `tests/unit/tripWorkspace.test.ts` y `tests/unit/accessibility-shell.test.tsx`: 3 archivos/46 pruebas pasan; typecheck y lint verdes. Esa evidencia acredita que un Viaje conserva etiqueta histórica, puede guardar su propia corrección y no recrea el Cliente eliminado. Edge local 127.0.0.1:4173 confirmó Proveedores (logo oficial, h1 único, alta manual) y Tareas (filtros compactos/expandidos) sin datos creados. | **Pausa segura, cobertura parcial.** La prueba de contexto histórico de `TaskBoard` ya está escrita pero su primera ejecución quedó sin resultado al interrumpir la sesión; falta resolver `deletedReferences` en Tareas/Formulario y continuar Comisiones, Calendario, Dashboard, búsqueda y guardas. Antes de cualquier regresión completa, B1 o publicación nueva, repetir la suite completa con salida legible. |
 
 ## Matriz de la fase de descubrimiento
 

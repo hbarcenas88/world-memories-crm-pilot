@@ -30,6 +30,13 @@ describe('TripList', () => {
     expect(screen.queryByText('active')).toBeNull();
   });
 
+  it('shows an explicit historical label instead of disguising a deliberately deleted client as unnamed', () => {
+    render(<TripList clients={[]} deletedReferences={[{ key: 'client:client-1', kind: 'client', id: 'client-1', displayLabel: 'Familia Rivera', deletedAt: '2026-09-05T00:00:00.000Z', eventDisposition: 'kept' }]} onSelect={vi.fn()} trips={[{ id: 'trip-1', leadId: 'lead-1', clientId: 'client-1', status: 'active', createdAt: '2026-08-29T00:00:00.000Z' }]} />);
+
+    expect(within(screen.getByLabelText('Lista de viajes')).getByText('Registro eliminado: Familia Rivera')).toBeTruthy();
+    expect(screen.queryByText('Sin cliente')).toBeNull();
+  });
+
   it('filters active trips independently by status, client, and effective date interval', async () => {
     const user = userEvent.setup();
     render(<TripList clients={[{ id: 'client-1', name: 'Familia Rivera', createdAt: '2026-08-29T00:00:00.000Z' }, { id: 'client-2', name: 'Familia Gómez', createdAt: '2026-08-29T00:00:00.000Z' }]} onSelect={vi.fn()} trips={[
@@ -37,6 +44,7 @@ describe('TripList', () => {
       { id: 'trip-2', leadId: 'lead-2', clientId: 'client-2', status: 'completed', createdAt: '2026-08-29T00:00:00.000Z', effectiveStartOn: '2026-08-10', effectiveEndOn: '2026-08-15' },
     ]} />);
 
+    await user.click(screen.getByRole('button', { name: 'Filtrar viajes' }));
     await user.selectOptions(screen.getByLabelText('Estado de viaje'), 'completed');
     const tripList = screen.getByLabelText('Lista de viajes');
     expect(within(tripList).getByText('Familia Gómez')).toBeTruthy();

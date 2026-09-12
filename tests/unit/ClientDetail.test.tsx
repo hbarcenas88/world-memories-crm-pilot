@@ -30,6 +30,7 @@ describe('ClientDetail', () => {
     expect(screen.getByText('15/08/2017')).toBeTruthy();
     expect(screen.getByText(/Edad actual:/)).toBeTruthy();
     expect(screen.getByText('Archivado')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Historial agregado/ })).toBeTruthy();
     expect(screen.getByText('Cotización enviada')).toBeTruthy();
     expect(screen.getByText('Pago del Cliente registrado')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Abrir viaje' }));

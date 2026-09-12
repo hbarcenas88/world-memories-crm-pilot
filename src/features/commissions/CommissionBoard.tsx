@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { t, useLocale } from '../../app/i18n';
 import { formatOperationalDate, formatOperationalNumber } from '../../domain/operationalDate';
-import type { ManagedRecordRef, RecordImpact } from '../../application/recordImpact';
+import type { ManagedRecordRef, RecordDeleteOptions, RecordImpact } from '../../application/recordImpact';
 import { ArchiveFilterChips, type ArchiveFilter } from '../../design/components/ArchiveFilterChips';
-import type { Commission, Provider } from '../../domain/types';
+import type { Commission, DeletedRecordReference, Provider } from '../../domain/types';
+import { resolveRecordReference } from '../../domain/recordReference';
 import { EmptyState } from '../../design/components/EmptyState';
 import { RecordActions } from '../records/RecordActions';
 
@@ -24,22 +25,30 @@ function groupCommissions(commissions: readonly Commission[], today: string): Re
 type CommissionBoardProps = Readonly<{
   commissions: readonly Commission[];
   providers: readonly Provider[];
+  deletedReferences?: readonly DeletedRecordReference[];
   onMarkPaid: (commission: Commission) => void;
   onUpdateTracking?: (commissionId: string, trackingReference: string) => Promise<void>;
   loadImpact?: (target: ManagedRecordRef) => Promise<RecordImpact>;
-  onArchive?: (target: ManagedRecordRef) => void;
-  onDelete?: (target: ManagedRecordRef) => void;
+  onArchive?: (target: ManagedRecordRef) => void | Promise<void>;
+  onDelete?: (target: ManagedRecordRef, options: RecordDeleteOptions) => void | Promise<void>;
   onOpenWorkspace?: (commission: Commission) => void;
   onRestore?: (target: ManagedRecordRef) => void;
   today?: string;
 }>;
 
-export function CommissionBoard({ commissions, providers, onMarkPaid, onUpdateTracking = async () => undefined, loadImpact, onArchive, onDelete, onOpenWorkspace, onRestore, today = new Date().toISOString().slice(0, 10) }: CommissionBoardProps) {
+export function CommissionBoard({ commissions, providers, deletedReferences = [], onMarkPaid, onUpdateTracking = async () => undefined, loadImpact, onArchive, onDelete, onOpenWorkspace, onRestore, today = new Date().toISOString().slice(0, 10) }: CommissionBoardProps) {
   const [trackingDrafts, setTrackingDrafts] = useState<Readonly<Record<string, string>>>({});
   const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>('active');
   const locale = useLocale();
   if (commissions.length === 0) return <EmptyState title={t('noCommissions', locale)} body={t('noCommissionsDescription', locale)} />;
-  const providerNames = new Map(providers.map((provider) => [provider.id, provider.name]));
+  const providerLabel = (providerId: string): string => {
+    const resolvedProvider = resolveRecordReference(providers, deletedReferences, 'provider', providerId);
+    return resolvedProvider.state === 'live'
+      ? resolvedProvider.record.name
+      : resolvedProvider.state === 'deleted'
+        ? t('deletedRecordReference', locale, { record: resolvedProvider.reference.displayLabel })
+        : t('noProvider', locale);
+  };
   const visibleCommissions = commissions.filter((commission) => archiveFilter === 'all' || (archiveFilter === 'archived' ? Boolean(commission.archivedAt) : !commission.archivedAt));
   const totalsByCurrency = new Map<string, { expected: number; received: number }>();
   for (const commission of visibleCommissions) {
@@ -55,7 +64,7 @@ export function CommissionBoard({ commissions, providers, onMarkPaid, onUpdateTr
   }
   const groups = groupCommissions(visibleCommissions, today);
   const renderGroup = (title: string, items: readonly Commission[], isOverdue = false) => <section aria-label={title} className="commission-group"><h2>{title}</h2>{items.length === 0 ? <p className="muted-copy">{t('noCommissionsInGroup', locale)}</p> : <div className="lead-table"><div className="lead-table-header"><span>{t('provider', locale)}</span><span>{t('expected', locale)}</span><span>{t('expectedDate', locale)}</span><span>{t('trackingForm', locale)}</span><span>{t('status', locale)}</span></div>{items.map((commission) => {
-    const providerName = providerNames.get(commission.providerId) ?? t('noProvider', locale);
+    const providerName = providerLabel(commission.providerId);
     const archived = Boolean(commission.archivedAt);
     return <div className="lead-row" key={commission.id}><strong>{providerName}</strong><span>{formatOperationalNumber(commission.expected.amount)} {commission.expected.currency}</span><span>{commission.dueOn ? formatOperationalDate(commission.dueOn) : t('undated', locale)}</span><span>{archived ? commission.trackingReference ?? t('notRegistered', locale) : <><input aria-label={`${t('trackingForm', locale)} ${commission.id}`} onChange={(event) => setTrackingDrafts((current) => ({ ...current, [commission.id]: event.target.value }))} value={trackingDrafts[commission.id] ?? commission.trackingReference ?? ''} /><button className="text-button" disabled={(trackingDrafts[commission.id] ?? commission.trackingReference ?? '').trim() === ''} onClick={() => { void onUpdateTracking(commission.id, trackingDrafts[commission.id] ?? commission.trackingReference ?? ''); }} type="button">{t('saveTracking', locale)}</button></>}</span><span>{onOpenWorkspace && <button className="text-button" onClick={() => onOpenWorkspace(commission)} type="button">{t('openFullWorkspaceFor', locale, { record: providerName })}</button>}{commission.status === 'paid' ? t('paid', locale) : !archived && <button className="secondary-button" onClick={() => onMarkPaid(commission)} type="button">{t('recordCommissionPayment', locale)}</button>}{isOverdue && <small>{t('internalCommissionFollowUp', locale)}</small>}{loadImpact && onArchive && onDelete && <RecordActions archived={archived} label={t('recordActionsCommission', locale, { provider: providerName })} loadImpact={loadImpact} onArchive={onArchive} onDelete={onDelete} onRestore={onRestore} target={{ kind: 'commission', id: commission.id }} />}</span></div>;
   })}</div>}</section>;

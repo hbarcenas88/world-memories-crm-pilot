@@ -58,6 +58,38 @@ describe('CSV package import', () => {
     await expect(repository.getLead('lead-new')).resolves.toMatchObject({ name: 'Lead nuevo' });
   });
 
+  it('imports a synthetic deleted reference without reviving a live record or accepting a collision', async () => {
+    const repository = new MemoryWorkspaceRepository();
+    const file = await packageFile({
+      'deleted_record_references.csv': 'kind,id,display_label,deleted_at,event_disposition\nlead,lead-deleted,Consulta histórica,2026-09-05T00:00:00.000Z,kept',
+    });
+    const preview = await previewCsvPackage(file, repository);
+    await applyCsvImport(preview, repository);
+
+    await expect(repository.snapshot()).resolves.toMatchObject({ deletedRecordReferences: [expect.objectContaining({ key: 'lead:lead-deleted', displayLabel: 'Consulta histórica' })] });
+
+    const collision = await packageFile({
+      'leads.csv': 'id,name,acquisition_source,requested_date_status,status,created_at\nlead-deleted,Intento de revivir,Web,dates_to_define,contacted,2026-09-05T00:00:00.000Z',
+      'deleted_record_references.csv': 'kind,id,display_label,deleted_at,event_disposition\nlead,lead-deleted,Consulta histórica,2026-09-05T00:00:00.000Z,kept',
+    });
+    const collisionPreview = await previewCsvPackage(collision, new MemoryWorkspaceRepository());
+    expect(collisionPreview.issues.map((item) => item.reason)).toContain('Una referencia eliminada no puede reutilizar un ID vivo');
+  });
+
+  it('rejects a new live row that reuses an already deleted identifier in the current workspace', async () => {
+    const repository = new MemoryWorkspaceRepository();
+    await repository.transact((tx) => tx.putDeletedRecordReference({ key: 'lead:lead-retired', kind: 'lead', id: 'lead-retired', displayLabel: 'Consulta retirada', deletedAt: '2026-09-05T00:00:00.000Z', eventDisposition: 'kept' }));
+    const file = await packageFile({
+      'leads.csv': 'id,name,acquisition_source,requested_date_status,status,created_at\nlead-retired,Intento de reutilización,Web,dates_to_define,contacted,2026-09-06T00:00:00.000Z',
+    });
+
+    const preview = await previewCsvPackage(file, repository);
+
+    expect(preview).toMatchObject({ accepted: 0, duplicates: 1 });
+    expect(preview.issues).toEqual(expect.arrayContaining([expect.objectContaining({ entity: 'lead', reason: 'ID ya existe', status: 'duplicate' })]));
+    await expect(repository.getLead('lead-retired')).resolves.toBeUndefined();
+  });
+
   it('rolls back the full confirmation when a non-Lead duplicate appears after preview', async () => {
     const repository = new MemoryWorkspaceRepository();
     const file = await packageFile({

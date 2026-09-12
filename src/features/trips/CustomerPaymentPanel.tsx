@@ -3,7 +3,9 @@ import { t, useLocale } from '../../app/i18n';
 import { customerBalance, paymentDueReminderDates } from '../../domain/paymentDue';
 import type { Currency, Payment, ServiceProvider } from '../../domain/types';
 import { formatOperationalDate, formatOperationalNumber } from '../../domain/operationalDate';
+import { AmountField } from '../../design/components/AmountField';
 import { OperationalDateField } from '../../design/components/OperationalDateField';
+import { ConfirmDialog } from '../../design/components/ConfirmDialog';
 
 export type CustomerPaymentComponent = Readonly<{
   id: string;
@@ -31,19 +33,25 @@ type CustomerPaymentPanelProps = Readonly<{
   onRecordCancellation?: (input: Readonly<{ serviceProviderId: string; cancellationOutcome: NonNullable<ServiceProvider['cancellationOutcome']>; commissionOutcome: 'cancel' | 'continue' }>) => Promise<void>;
 }>;
 
+type PendingPaymentConfirmation =
+  | Readonly<{ kind: 'record'; component: CustomerPaymentComponent }>
+  | Readonly<{ kind: 'correct'; payment: Payment }>;
+
 function formatReminder(date: string): string { return formatOperationalDate(date); }
 
 function formatAmount(amount: number): string { return formatOperationalNumber(amount); }
 
 export function CustomerPaymentPanel({ components, payments, onRecordPayment, onCorrectPayment = async () => undefined, onAssignInitialPayment = async () => undefined, onOpenPaymentWorkspace, renderPaymentActions, onEnableCommission, onRecordCancellation }: CustomerPaymentPanelProps) {
   const locale = useLocale();
-  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [amounts, setAmounts] = useState<Record<string, number | undefined>>({});
+  const [amountValidity, setAmountValidity] = useState<Record<string, boolean>>({});
   const [occurredOn, setOccurredOn] = useState<Record<string, string>>({});
   const [savingComponentId, setSavingComponentId] = useState<string>();
   const [initialAssignments, setInitialAssignments] = useState<Record<string, string>>({});
   const [assigningPaymentId, setAssigningPaymentId] = useState<string>();
   const [editingPaymentId, setEditingPaymentId] = useState<string>();
-  const [correctionAmounts, setCorrectionAmounts] = useState<Record<string, string>>({});
+  const [correctionAmounts, setCorrectionAmounts] = useState<Record<string, number | undefined>>({});
+  const [correctionAmountValidity, setCorrectionAmountValidity] = useState<Record<string, boolean>>({});
   const [correctionDates, setCorrectionDates] = useState<Record<string, string>>({});
   const [correctingPaymentId, setCorrectingPaymentId] = useState<string>();
   const [error, setError] = useState<string>();
@@ -52,6 +60,7 @@ export function CustomerPaymentPanel({ components, payments, onRecordPayment, on
   const [cancellationOutcomes, setCancellationOutcomes] = useState<Record<string, NonNullable<ServiceProvider['cancellationOutcome']> | ''>>({});
   const [commissionOutcomes, setCommissionOutcomes] = useState<Record<string, 'cancel' | 'continue' | ''>>({});
   const [recordingCancellationId, setRecordingCancellationId] = useState<string>();
+  const [pendingPaymentConfirmation, setPendingPaymentConfirmation] = useState<PendingPaymentConfirmation>();
 
   async function recordCancellation(component: CustomerPaymentComponent): Promise<void> {
     const cancellationOutcome = cancellationOutcomes[component.id];
@@ -74,19 +83,25 @@ export function CustomerPaymentPanel({ components, payments, onRecordPayment, on
 
   if (components.length === 0) return <p className="muted-copy">{t('noPaymentComponents', locale)}</p>;
 
-  async function record(component: CustomerPaymentComponent): Promise<void> {
-    const amount = Number(amounts[component.id]);
+  async function record(component: CustomerPaymentComponent, confirmed = false): Promise<void> {
+    const amount = amounts[component.id];
     const effectiveDate = occurredOn[component.id];
-    if (!Number.isFinite(amount) || amount <= 0 || !effectiveDate) {
+    if (amount === undefined || amountValidity[component.id] === false || amount <= 0 || !effectiveDate) {
       setError(t('positiveAmountDateRequired', locale));
+      return;
+    }
+    if (!confirmed) {
+      setPendingPaymentConfirmation({ kind: 'record', component });
       return;
     }
     setSavingComponentId(component.id);
     setError(undefined);
     try {
       await onRecordPayment({ serviceProviderId: component.id, amount: { amount, currency: component.currency }, occurredOn: effectiveDate });
-      setAmounts((current) => ({ ...current, [component.id]: '' }));
+      setAmounts((current) => ({ ...current, [component.id]: undefined }));
+      setAmountValidity((current) => ({ ...current, [component.id]: true }));
       setOccurredOn((current) => ({ ...current, [component.id]: '' }));
+      setPendingPaymentConfirmation(undefined);
     } catch {
       setError(t('paymentCouldNotBeRecorded', locale));
     } finally {
@@ -113,16 +128,21 @@ export function CustomerPaymentPanel({ components, payments, onRecordPayment, on
 
   function beginCorrection(payment: Payment): void {
     setEditingPaymentId(payment.id);
-    setCorrectionAmounts((current) => ({ ...current, [payment.id]: String(payment.amount.amount) }));
+    setCorrectionAmounts((current) => ({ ...current, [payment.id]: payment.amount.amount }));
+    setCorrectionAmountValidity((current) => ({ ...current, [payment.id]: true }));
     setCorrectionDates((current) => ({ ...current, [payment.id]: payment.occurredAt.slice(0, 10) }));
     setError(undefined);
   }
 
-  async function correct(payment: Payment): Promise<void> {
-    const amount = Number(correctionAmounts[payment.id]);
+  async function correct(payment: Payment, confirmed = false): Promise<void> {
+    const amount = correctionAmounts[payment.id];
     const effectiveDate = correctionDates[payment.id];
-    if (!Number.isFinite(amount) || amount <= 0 || !effectiveDate) {
+    if (amount === undefined || correctionAmountValidity[payment.id] === false || amount <= 0 || !effectiveDate) {
       setError(t('correctionAmountDateRequired', locale));
+      return;
+    }
+    if (!confirmed) {
+      setPendingPaymentConfirmation({ kind: 'correct', payment });
       return;
     }
     setCorrectingPaymentId(payment.id);
@@ -130,6 +150,7 @@ export function CustomerPaymentPanel({ components, payments, onRecordPayment, on
     try {
       await onCorrectPayment({ paymentId: payment.id, amount: { amount, currency: payment.amount.currency }, occurredOn: effectiveDate });
       setEditingPaymentId(undefined);
+      setPendingPaymentConfirmation(undefined);
     } catch {
       setError(t('paymentCouldNotBeCorrected', locale));
     } finally {
@@ -151,13 +172,14 @@ export function CustomerPaymentPanel({ components, payments, onRecordPayment, on
     })}
     {components.map((component) => {
       const componentPayments = payments.filter((payment) => payment.serviceProviderId === component.id);
-      const paid = componentPayments.reduce((total, payment) => total + payment.amount.amount, 0);
-      const balance = component.saleAmount === undefined ? undefined : customerBalance({ amount: component.saleAmount, currency: component.currency }, componentPayments.map((payment) => payment.amount));
+      const hasCurrencyMismatch = componentPayments.some((payment) => payment.amount.currency !== component.currency);
+      const paid = componentPayments.filter((payment) => payment.amount.currency === component.currency).reduce((total, payment) => total + payment.amount.amount, 0);
+      const balance = component.saleAmount === undefined || hasCurrencyMismatch ? undefined : customerBalance({ amount: component.saleAmount, currency: component.currency }, componentPayments.map((payment) => payment.amount));
       const reminders = component.customerBalanceDueOn ? paymentDueReminderDates(component.customerBalanceDueOn).map(formatReminder).join(' · ') : undefined;
       return <article className="payment-component" key={component.id}>
         <div><strong>{component.serviceName}</strong><span>{component.providerName}</span>{component.reservationLocator && <span>{t('reservationLocator', locale)}: {component.reservationLocator}</span>}{component.archived && <span className="archived-label">{t('serviceArchived', locale)}</span>}{component.cancelledAt && <span className="archived-label">{t('componentCancellationRecorded', locale)}</span>}</div>
         <p>{t('totalPaid', locale, { amount: formatAmount(paid), currency: component.currency })}</p>
-        <p>{balance === undefined ? t('pendingBalanceUnknown', locale) : t('pendingBalance', locale, { amount: formatAmount(balance), currency: component.currency })}</p>
+        <p>{hasCurrencyMismatch ? t('calendarBalanceCurrencyMismatch', locale) : balance === undefined ? t('pendingBalanceUnknown', locale) : t('pendingBalance', locale, { amount: formatAmount(balance), currency: component.currency })}</p>
         {component.customerBalanceDueOn && <p>{t('dueDate', locale, { date: formatReminder(component.customerBalanceDueOn) })}</p>}
         {reminders && <p className="muted-copy">{t('internalReminders', locale, { dates: reminders })}</p>}
         {component.commissionStatus === 'without_commission' && onEnableCommission && <button className="text-button" disabled={enablingCommissionId === component.id} onClick={() => { setEnablingCommissionId(component.id); void onEnableCommission(component.id).catch(() => setError(t('commissionCouldNotBeEnabled', locale))).finally(() => setEnablingCommissionId(undefined)); }} type="button">{enablingCommissionId === component.id ? t('enablingCommission', locale) : t('enableCommission', locale)}</button>}
@@ -165,18 +187,19 @@ export function CustomerPaymentPanel({ components, payments, onRecordPayment, on
         {componentPayments.length > 0 && <div className="payment-history">{componentPayments.map((payment) => <div key={payment.id}>
           <span>{formatAmount(payment.amount.amount)} {payment.amount.currency} · {formatOperationalDate(payment.occurredAt)}{payment.archivedAt ? ` · ${t('paymentArchived', locale)}` : ''}</span>
           {onOpenPaymentWorkspace && <button className="text-button" onClick={() => onOpenPaymentWorkspace(payment)} type="button">{t('openFullWorkspaceFor', locale, { record: payment.id })}</button>}{!payment.archivedAt && !component.archived && (editingPaymentId === payment.id ? <div className="payment-entry">
-            <label>{t('correctedAmount', locale)}<input aria-label={t('correctionAmountFor', locale, { id: payment.id })} inputMode="decimal" min="0" onChange={(event) => setCorrectionAmounts((current) => ({ ...current, [payment.id]: event.target.value }))} step="0.01" type="number" value={correctionAmounts[payment.id] ?? ''} /></label>
+            <label>{t('correctedAmount', locale)}<AmountField errorMessage={t('correctionAmountDateRequired', locale)} label={t('correctionAmountFor', locale, { id: payment.id })} onChange={(amount) => setCorrectionAmounts((current) => ({ ...current, [payment.id]: amount }))} onValidityChange={(valid) => setCorrectionAmountValidity((current) => ({ ...current, [payment.id]: valid }))} value={correctionAmounts[payment.id]} /></label>
             <label>{t('correctedEffectiveDate', locale)}<OperationalDateField aria-label={t('correctionDateFor', locale, { id: payment.id })} onChange={(date) => setCorrectionDates((current) => ({ ...current, [payment.id]: date }))} value={correctionDates[payment.id]} /></label>
             <button className="secondary-button" disabled={correctingPaymentId === payment.id} onClick={() => { void correct(payment); }} type="button">{correctingPaymentId === payment.id ? t('correcting', locale) : t('saveCorrectionFor', locale, { id: payment.id })}</button>
           </div> : <button className="text-button" onClick={() => beginCorrection(payment)} type="button">{t('editPayment', locale, { id: payment.id })}</button>)}{renderPaymentActions?.(payment)}
         </div>)}</div>}
         {!component.archived && !component.cancelledAt && <div className="payment-entry">
-          <label>{t('amount', locale)}<input aria-label={t('paymentAmountFor', locale, { service: component.serviceName })} inputMode="decimal" min="0" onChange={(event) => setAmounts((current) => ({ ...current, [component.id]: event.target.value }))} step="0.01" type="number" value={amounts[component.id] ?? ''} /></label>
+          <label>{t('amount', locale)}<AmountField errorMessage={t('positiveAmountDateRequired', locale)} label={t('paymentAmountFor', locale, { service: component.serviceName })} onChange={(amount) => setAmounts((current) => ({ ...current, [component.id]: amount }))} onValidityChange={(valid) => setAmountValidity((current) => ({ ...current, [component.id]: valid }))} value={amounts[component.id]} /></label>
           <label>{t('effectiveDate', locale)}<OperationalDateField aria-label={t('paymentEffectiveDateFor', locale, { service: component.serviceName })} onChange={(date) => setOccurredOn((current) => ({ ...current, [component.id]: date }))} value={occurredOn[component.id]} /></label>
           <button className="secondary-button" disabled={savingComponentId === component.id} onClick={() => { void record(component); }} type="button">{savingComponentId === component.id ? t('recording', locale) : t('recordPaymentFor', locale, { service: component.serviceName })}</button>
         </div>}
       </article>;
     })}
-    {error && <p className="form-error" role="alert">{error}</p>}
+    {error && !pendingPaymentConfirmation && <p className="form-error" role="alert">{error}</p>}
+    {pendingPaymentConfirmation && <ConfirmDialog actions={<><button className="secondary-button" data-dialog-safe disabled={(pendingPaymentConfirmation.kind === 'record' ? savingComponentId === pendingPaymentConfirmation.component.id : correctingPaymentId === pendingPaymentConfirmation.payment.id)} onClick={() => setPendingPaymentConfirmation(undefined)} type="button">{t('cancel', locale)}</button><button className="primary-button" disabled={(pendingPaymentConfirmation.kind === 'record' ? savingComponentId === pendingPaymentConfirmation.component.id : correctingPaymentId === pendingPaymentConfirmation.payment.id)} onClick={() => { void (pendingPaymentConfirmation.kind === 'record' ? record(pendingPaymentConfirmation.component, true) : correct(pendingPaymentConfirmation.payment, true)); }} type="button">{t(pendingPaymentConfirmation.kind === 'record' ? 'confirmPaymentRecord' : 'confirmPaymentCorrection', locale)}</button></>} busy={pendingPaymentConfirmation.kind === 'record' ? savingComponentId === pendingPaymentConfirmation.component.id : correctingPaymentId === pendingPaymentConfirmation.payment.id} onCancel={() => setPendingPaymentConfirmation(undefined)} title={t(pendingPaymentConfirmation.kind === 'record' ? 'confirmPaymentRecord' : 'confirmPaymentCorrection', locale)}><p>{pendingPaymentConfirmation.kind === 'record' ? t('confirmPaymentRecordDescription', locale, { amount: formatAmount(amounts[pendingPaymentConfirmation.component.id] ?? 0), currency: pendingPaymentConfirmation.component.currency, date: formatOperationalDate(occurredOn[pendingPaymentConfirmation.component.id]) }) : t('confirmPaymentCorrectionDescription', locale, { amount: formatAmount(correctionAmounts[pendingPaymentConfirmation.payment.id] ?? 0), currency: pendingPaymentConfirmation.payment.amount.currency, date: formatOperationalDate(correctionDates[pendingPaymentConfirmation.payment.id]) })}</p>{error && <p className="form-error" role="alert">{error}</p>}</ConfirmDialog>}
   </section>;
 }

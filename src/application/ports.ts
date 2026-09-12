@@ -1,6 +1,6 @@
-import type { ActivityEvent, BackupDownload, Client, Commission, Lead, Payment, Provider, ProviderTaskTemplate, RichNote, Service, ServiceAdditionalItem, ServiceProvider, Task, Trip, WorkspaceConfiguration } from '../domain/types';
+import type { ActivityEvent, BackupDownload, Client, Commission, DeletedRecordReference, Lead, Payment, Provider, ProviderTaskTemplate, RichNote, Service, ServiceAdditionalItem, ServiceProvider, Task, Trip, WorkspaceConfiguration } from '../domain/types';
 import type { WorkspaceSnapshot } from './workspaceSnapshot';
-import type { ManagedRecordRef, RecordImpact } from './recordImpact';
+import type { ManagedRecordRef, RecordDeleteOptions, RecordImpact } from './recordImpact';
 
 export interface WorkspaceTransaction {
   getLead(id: string): Promise<Lead | undefined>;
@@ -16,6 +16,7 @@ export interface WorkspaceTransaction {
   getCommission(id: string): Promise<Commission | undefined>;
   getNote(id: string): Promise<RichNote | undefined>;
   getEvent(id: string): Promise<ActivityEvent | undefined>;
+  getDeletedRecordReference(key: string): Promise<DeletedRecordReference | undefined>;
   getConfiguration(): Promise<WorkspaceConfiguration>;
   getRecordImpact(target: ManagedRecordRef): Promise<RecordImpact>;
   listProviderTaskTemplates(providerId: string): Promise<readonly ProviderTaskTemplate[]>;
@@ -35,8 +36,9 @@ export interface WorkspaceTransaction {
   putPayment(payment: Payment): Promise<void>;
   putTask(task: Task): Promise<void>;
   putConfiguration(configuration: WorkspaceConfiguration): Promise<void>;
+  putDeletedRecordReference(reference: DeletedRecordReference): Promise<void>;
   putEvents(events: readonly ActivityEvent[]): Promise<void>;
-  deleteRecord(target: ManagedRecordRef): Promise<void>;
+  deleteRecord(target: ManagedRecordRef, options?: RecordDeleteOptions): Promise<void>;
 }
 
 export interface WorkspaceRepository {
@@ -62,6 +64,7 @@ export interface WorkspaceRepository {
   listPaymentsForTrip(tripId: string): Promise<readonly Payment[]>;
   listEventsForAggregate(aggregateId: string): Promise<readonly ActivityEvent[]>;
   listBackupDownloads(): Promise<readonly BackupDownload[]>;
+  listDeletedRecordReferences(): Promise<readonly DeletedRecordReference[]>;
   recordBackupDownload(download: BackupDownload): Promise<void>;
   dismissBackupReminder(id: string, until: string): Promise<void>;
   snapshot(): Promise<WorkspaceSnapshot>;

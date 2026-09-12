@@ -19,15 +19,16 @@ describe('buildWorkspaceNotifications', () => {
 
   it('keeps an active customer-payment alert visible without treating a dismissed panel as resolution', () => {
     const service = { id: 'service-1', tripId: 'trip-1', name: 'Hotel', status: 'active' as const, createdAt: '2026-08-20T00:00:00.000Z' };
-    const component = { id: 'component-1', serviceId: service.id, providerId: 'provider-1', currency: 'USD' as const, commissionStatus: 'without_commission' as const, customerBalanceDueOn: '2026-08-25', createdAt: '2026-08-20T00:00:00.000Z' };
+    const component = { id: 'component-1', serviceId: service.id, providerId: 'provider-1', currency: 'USD' as const, saleAmount: 900, commissionStatus: 'without_commission' as const, customerBalanceDueOn: '2026-08-25', createdAt: '2026-08-20T00:00:00.000Z' };
 
     expect(buildWorkspaceNotifications({ commissions: [], serviceProviders: [component], services: [service], tasks: [], today: '2026-08-26' })).toMatchObject([{ id: 'payment:component-1', kind: 'payment', targetId: 'component-1', subject: 'overdue' }]);
     expect(buildWorkspaceNotifications({ commissions: [], serviceProviders: [{ ...component, customerBalanceDueOn: '2026-09-03' }], services: [service], tasks: [], today: '2026-08-26' })).toEqual([]);
+    expect(buildWorkspaceNotifications({ commissions: [], serviceProviders: [component], services: [service], payments: [{ id: 'payment-1', tripId: 'trip-1', serviceProviderId: component.id, amount: { amount: 900, currency: 'USD' }, occurredAt: '2026-08-25T00:00:00.000Z', recordedAt: '2026-08-25T00:00:00.000Z', status: 'received', source: 'customer_payment' }], tasks: [], today: '2026-08-26' })).toEqual([]);
   });
 
   it('also alerts seven days before a customer balance becomes due', () => {
     const service = { id: 'service-next', tripId: 'trip-1', name: 'Hotel', status: 'active' as const, createdAt: '2026-08-20T00:00:00.000Z' };
-    const component = { id: 'component-next', serviceId: service.id, providerId: 'provider-1', currency: 'USD' as const, commissionStatus: 'without_commission' as const, customerBalanceDueOn: '2026-09-01', createdAt: '2026-08-20T00:00:00.000Z' };
+    const component = { id: 'component-next', serviceId: service.id, providerId: 'provider-1', currency: 'USD' as const, saleAmount: 900, commissionStatus: 'without_commission' as const, customerBalanceDueOn: '2026-09-01', createdAt: '2026-08-20T00:00:00.000Z' };
 
     expect(buildWorkspaceNotifications({ commissions: [], serviceProviders: [component], services: [service], tasks: [], today: '2026-08-26' })).toMatchObject([{ id: 'payment:component-next', kind: 'payment', subject: 'upcoming' }]);
   });

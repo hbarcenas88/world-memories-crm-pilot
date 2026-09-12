@@ -49,12 +49,19 @@ describe('buildDashboardSnapshot', () => {
       tasks: [],
       commissions: [],
       services: [{ id: 'service-1', tripId: 'trip-next', name: 'Hotel', status: 'active', createdAt: '2026-08-20T00:00:00.000Z' }],
-      serviceProviders: [{ id: 'component-1', serviceId: 'service-1', providerId: 'provider-1', currency: 'USD', commissionStatus: 'without_commission', customerBalanceDueOn: '2026-08-26', createdAt: '2026-08-20T00:00:00.000Z' }],
+      serviceProviders: [{ id: 'component-1', serviceId: 'service-1', providerId: 'provider-1', currency: 'USD', saleAmount: 900, commissionStatus: 'without_commission', customerBalanceDueOn: '2026-08-26', createdAt: '2026-08-20T00:00:00.000Z' }],
     });
 
     expect(snapshot.activeLeads).toHaveLength(1);
     expect(snapshot.followUpLeads).toHaveLength(1);
     expect(snapshot.dueCustomerBalances).toHaveLength(1);
     expect(snapshot.upcomingTrips.map((trip) => trip.id)).toEqual(['trip-next']);
+  });
+
+  it('does not queue a paid, archived, cancelled or currency-mismatched customer balance', () => {
+    const base = { id: 'component-1', serviceId: 'service-1', providerId: 'provider-1', currency: 'USD' as const, saleAmount: 900, commissionStatus: 'without_commission' as const, customerBalanceDueOn: '2026-08-26', createdAt: '2026-08-20T00:00:00.000Z' };
+    const workspace = { today: '2026-08-26', leads: [], trips: [], tasks: [], commissions: [], services: [{ id: 'service-1', tripId: 'trip-1', name: 'Hotel', status: 'active' as const, createdAt: '2026-08-20T00:00:00.000Z' }], serviceProviders: [base] };
+    expect(buildDashboardSnapshot({ ...workspace, payments: [{ id: 'payment-1', tripId: 'trip-1', serviceProviderId: 'component-1', amount: { amount: 900, currency: 'USD' as const }, occurredAt: '2026-08-20T00:00:00.000Z', recordedAt: '2026-08-20T00:00:00.000Z', status: 'received' as const, source: 'customer_payment' as const }] }).dueCustomerBalances).toHaveLength(0);
+    expect(buildDashboardSnapshot({ ...workspace, payments: [{ id: 'payment-1', tripId: 'trip-1', serviceProviderId: 'component-1', amount: { amount: 900, currency: 'MXN' as const }, occurredAt: '2026-08-20T00:00:00.000Z', recordedAt: '2026-08-20T00:00:00.000Z', status: 'received' as const, source: 'customer_payment' as const }] }).dueCustomerBalances).toHaveLength(0);
   });
 });

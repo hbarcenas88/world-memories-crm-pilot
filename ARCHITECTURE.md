@@ -136,6 +136,8 @@ El JSON de respaldo del MVP no aplica contraseña ni cifrado adicional dentro de
 
 Restaurar JSON reemplaza completamente la base local. Antes de habilitarlo, el sistema exige descargar un respaldo del estado actual, valida integridad/compatibilidad y presenta fecha, versión y conteos del archivo elegido. La usuaria confirma explícitamente. La restauración se completa toda o no modifica nada.
 
+El respaldo vigente usa esquema JSON 3 y conserva además referencias históricas mínimas de registros eliminados cuando otros registros todavía los citan. Cada referencia guarda solamente su tipo, identificador, etiqueta de contexto, fecha de eliminación y disposición de sus eventos propios; no revive ni altera los registros relacionados. Las copias JSON 1 y 2 se actualizan de modo determinista y aditivo al esquema 3 durante la restauración. IndexedDB v14 guarda la misma colección en la transacción de eliminación, por lo que un error no deja referencias a medio escribir.
+
 La pantalla Datos y respaldos incluye el mini manual operativo no técnico aprobado en DEC-171 junto a las acciones correspondientes.
 
 ## Manejo de errores

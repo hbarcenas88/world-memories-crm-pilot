@@ -26,6 +26,19 @@ const now = '2026-08-26T12:00:00.000Z';
 afterEach(cleanup);
 
 describe('TripDetail', () => {
+  it('uses the same deliberate reprogramming control and completion action for a Trip task', async () => {
+    const user = userEvent.setup();
+    const onRescheduleTask = vi.fn().mockResolvedValue(undefined);
+    const onCompleteTask = vi.fn();
+    render(<TripDetail client={{ id: 'client-1', name: 'Familia Rivera', createdAt: now }} trip={{ id: 'trip-1', leadId: 'lead-1', clientId: 'client-1', status: 'active', createdAt: now }} services={[]} notes={[]} onClose={vi.fn()} onSave={vi.fn()} onCompleteTask={onCompleteTask} onRescheduleTask={onRescheduleTask} tasks={[{ id: 'task-1', title: 'Confirmar hotel', required: false, tripId: 'trip-1', dueOn: '2026-09-10', status: 'open', createdAt: now }]} />);
+    await user.click(screen.getByRole('button', { name: 'Reprogramar tarea' }));
+    fireEvent.change(screen.getByLabelText('Nueva fecha para Confirmar hotel'), { target: { value: '11/09/2026' } });
+    await user.click(screen.getByRole('button', { name: 'Aplicar fecha' }));
+    expect(onRescheduleTask).toHaveBeenCalledWith('task-1', '2026-09-11');
+    await user.click(screen.getByRole('button', { name: 'Completar' }));
+    expect(onCompleteTask).toHaveBeenCalledWith('task-1');
+  });
+
   it('keeps client, trip and work note in one draft until Guardar cambios', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
@@ -73,11 +86,23 @@ describe('TripDetail', () => {
     await user.click(screen.getByRole('button', { name: 'Cerrar expediente' }));
 
     expect(screen.getByRole('dialog', { name: 'Cambios sin guardar' })).toBeTruthy();
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancelar' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Seguir editando' }));
     expect(screen.getByRole('button', { name: 'Guardar' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Salir sin guardar' })).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+    await user.click(screen.getByRole('button', { name: 'Seguir editando' }));
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('requires a deliberate confirmation before cancelling a Trip and lets Escape preserve it', async () => {
+    const user = userEvent.setup();
+    const onCancelTrip = vi.fn().mockResolvedValue(undefined);
+    render(<TripDetail client={{ id: 'client-1', name: 'Familia Rivera', createdAt: now }} trip={{ id: 'trip-1', leadId: 'lead-1', clientId: 'client-1', status: 'active', createdAt: now }} services={[]} notes={[]} onCancelTrip={onCancelTrip} onClose={vi.fn()} onSave={vi.fn()} />);
+
+    await user.click(screen.getByRole('button', { name: 'Cancelar viaje' }));
+    expect(screen.getByRole('dialog', { name: 'Confirmar cancelación del viaje' })).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect(onCancelTrip).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: 'Confirmar cancelación del viaje' })).toBeNull();
   });
 
   it('adds a service to the shared workspace draft before its single save', async () => {
@@ -125,6 +150,31 @@ describe('TripDetail', () => {
     await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ serviceAdditionalItems: [expect.objectContaining({ serviceId: 'service-1', label: 'Seguro', amount: 80, currency: 'USD' })] }));
+  });
+
+  it('formats an additional concept while keeping its saved amount unlocalized', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(<TripDetail
+      client={{ id: 'client-1', name: 'Familia Rivera', createdAt: now }}
+      trip={{ id: 'trip-1', leadId: 'lead-1', clientId: 'client-1', status: 'active', createdAt: now }}
+      services={[{ id: 'service-1', tripId: 'trip-1', name: 'Hotel familiar', status: 'active', createdAt: now }]}
+      notes={[]}
+      onClose={vi.fn()}
+      onSave={onSave}
+    />);
+
+    await user.selectOptions(screen.getByLabelText('Servicio del concepto'), 'service-1');
+    await user.type(screen.getByLabelText('Concepto'), 'Seguro');
+    await user.type(screen.getByLabelText('Importe del concepto'), '1234.5');
+
+    expect((screen.getByLabelText('Importe del concepto') as HTMLInputElement).value).toBe('1,234.5');
+
+    await user.selectOptions(screen.getByLabelText('Moneda Conceptos adicionales'), 'USD');
+    await user.click(screen.getByRole('button', { name: 'Agregar concepto adicional' }));
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ serviceAdditionalItems: [expect.objectContaining({ amount: 1234.5, currency: 'USD' })] }));
   });
 
   it('edits an existing additional concept inside the same Service workspace draft', async () => {
@@ -290,7 +340,7 @@ describe('TripDetail', () => {
     />);
 
     expect(screen.getByRole('heading', { name: 'Historial agregado' })).toBeTruthy();
-    expect(screen.getByText('payment recorded')).toBeTruthy();
+    expect(screen.getByText('Pago registrado')).toBeTruthy();
     expect(screen.getByText(formatOperationalDateTime('2026-09-15T14:30:00.000Z'))).toBeTruthy();
   });
 

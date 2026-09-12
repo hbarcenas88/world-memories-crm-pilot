@@ -1,10 +1,13 @@
 import type { WorkspaceRepository } from '../ports';
-import type { ManagedRecordRef } from '../recordImpact';
+import type { ManagedRecordRef, RecordDeleteOptions } from '../recordImpact';
 
-export async function deleteRecord(repository: WorkspaceRepository, target: ManagedRecordRef): Promise<void> {
+/**
+ * This operation is intentionally destructive only after the UI has shown the impact twice.
+ * Related records stay intact, even when that leaves their reference historical/incongruent.
+ */
+export async function deleteRecord(repository: WorkspaceRepository, target: ManagedRecordRef, options: RecordDeleteOptions = {}): Promise<void> {
   await repository.transact(async (transaction) => {
-    const impact = await transaction.getRecordImpact(target);
-    if (!impact.canDelete) throw new Error('record has dependent relationships');
-    await transaction.deleteRecord(target);
+    await transaction.getRecordImpact(target);
+    await transaction.deleteRecord(target, options);
   });
 }

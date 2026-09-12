@@ -22,6 +22,18 @@ export type WorkspaceConfiguration = Readonly<{
   updatedAt: string;
 }>;
 
+/** A non-editable historical label retained when a related live record was deliberately deleted. */
+export type DeletedRecordReference = Readonly<{
+  key: string;
+  kind: "lead" | "client" | "trip" | "provider" | "service" | "payment" | "commission" | "task";
+  id: string;
+  displayLabel: string;
+  deletedAt: string;
+  eventDisposition: "kept" | "deleted";
+  /** Stable producer key for an automated record that must not be recreated after deletion. */
+  automationKey?: string;
+}>;
+
 export type Money = Readonly<{
   amount: number;
   currency: Currency;

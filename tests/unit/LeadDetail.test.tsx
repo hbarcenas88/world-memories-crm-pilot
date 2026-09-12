@@ -9,12 +9,20 @@ afterEach(cleanup);
 const lead = { id: 'lead-1', name: 'Familia Rivera', acquisitionSource: 'Instagram', requestedDateStatus: 'dates_to_define' as const, status: 'contacted' as const, createdAt: '2026-08-25T12:00:00.000Z', destination: 'Japón' };
 
 describe('LeadDetail', () => {
+  it('groups the record title and its contextual actions in the shared header', () => {
+    render(<LeadDetail lead={lead} clients={[]} events={[]} tasks={[]} onTransition={vi.fn()} onConvert={vi.fn()} onCompleteTask={vi.fn()} onRescheduleTask={vi.fn()} onClose={vi.fn()} onOpenWorkspace={vi.fn()} recordActions={<button type="button">Más acciones</button>} />);
+
+    expect(screen.getByRole('heading', { name: 'Familia Rivera' }).closest('.record-header')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Abrir expediente completo' }).closest('.action-row')).toBeTruthy();
+  });
+
   it('shows the lead history and lets the operator move from contacted to quote preparation', async () => {
     const user = userEvent.setup();
     const onTransition = vi.fn();
     render(<LeadDetail lead={lead} clients={[]} events={[{ id: 'event-1', aggregateType: 'lead', aggregateId: 'lead-1', type: 'lead_received', occurredAt: '2026-08-25T12:00:00.000Z', recordedAt: '2026-08-25T12:00:00.000Z', payload: {} }]} tasks={[]} onTransition={onTransition} onConvert={vi.fn()} onCompleteTask={vi.fn()} onRescheduleTask={vi.fn()} onClose={vi.fn()} />);
 
     expect(screen.getByRole('heading', { name: 'Familia Rivera' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Actividad' })).toBeTruthy();
     expect(screen.getByText('Consulta recibida')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Preparar cotización' }));
 
@@ -27,7 +35,9 @@ describe('LeadDetail', () => {
     const onRescheduleTask = vi.fn();
     render(<LeadDetail lead={{ ...lead, status: 'quote_sent' }} clients={[]} events={[]} tasks={[{ id: 'task-1', title: 'Dar seguimiento a cotizaciÃ³n', required: false, dueOn: '2026-08-29', status: 'open', leadId: 'lead-1', createdAt: '2026-08-25T12:00:00.000Z' }]} onTransition={vi.fn()} onConvert={vi.fn()} onCompleteTask={onCompleteTask} onRescheduleTask={onRescheduleTask} onClose={vi.fn()} />);
 
+    await user.click(screen.getByRole('button', { name: 'Reprogramar tarea' }));
     fireEvent.change(screen.getByLabelText('Nueva fecha para Dar seguimiento a cotizaciÃ³n'), { target: { value: '01/09/2026' } });
+    await user.click(screen.getByRole('button', { name: 'Aplicar fecha' }));
     await user.click(screen.getByRole('button', { name: 'Completar' }));
 
     expect(onRescheduleTask).toHaveBeenCalledWith('task-1', '2026-09-01');

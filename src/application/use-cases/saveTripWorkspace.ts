@@ -4,7 +4,7 @@ import type { Client, RichNote, Service, ServiceAdditionalItem, Trip } from '../
 import type { WorkspaceRepository } from '../ports';
 
 type SaveTripWorkspaceCommand = Readonly<{
-  client: Client;
+  client?: Client;
   trip: Trip;
   services: readonly Service[];
   serviceAdditionalItems?: readonly ServiceAdditionalItem[];
@@ -30,13 +30,13 @@ function deriveTripInterval(trip: Trip, services: readonly Service[]): Trip {
 }
 
 function validate(command: SaveTripWorkspaceCommand): void {
-  if (command.trip.clientId !== command.client.id) throw new Error('trip does not belong to client');
+  if (command.client && command.trip.clientId !== command.client.id) throw new Error('trip does not belong to client');
   if (command.services.some((service) => service.tripId !== command.trip.id)) throw new Error('service does not belong to trip');
   const serviceIds = new Set(command.services.map((service) => service.id));
   if (command.serviceAdditionalItems?.some((item) => !serviceIds.has(item.serviceId))) throw new Error('service additional item does not belong to trip');
   if (command.notes.some((note) => note.ownerType === 'trip' && note.ownerId !== command.trip.id)) throw new Error('trip note does not belong to trip');
-  if (command.notes.some((note) => note.ownerType === 'client' && note.ownerId !== command.client.id)) throw new Error('client note does not belong to client');
-  const memberIds = new Set(command.client.members?.map((member) => member.id) ?? []);
+  if (command.notes.some((note) => note.ownerType === 'client' && (!command.client || note.ownerId !== command.client.id))) throw new Error('client note does not belong to client');
+  const memberIds = new Set(command.client?.members?.map((member) => member.id) ?? []);
   if (command.trip.primaryMemberId && !memberIds.has(command.trip.primaryMemberId)) throw new Error('trip primary traveler is not a client member');
   if (command.trip.travelerMemberIds?.some((memberId) => !memberIds.has(memberId))) throw new Error('trip traveler is not a client member');
   if (command.trip.primaryMemberId && command.trip.travelerMemberIds && !command.trip.travelerMemberIds.includes(command.trip.primaryMemberId)) throw new Error('trip primary traveler must participate in trip');
@@ -73,12 +73,19 @@ function withoutDueOn(task: import('../../domain/types').Task): import('../../do
   return next;
 }
 
-export async function saveTripWorkspace(repository: WorkspaceRepository, command: SaveTripWorkspaceCommand): Promise<{ client: Client; trip: Trip }> {
+export async function saveTripWorkspace(repository: WorkspaceRepository, command: SaveTripWorkspaceCommand): Promise<{ client?: Client; trip: Trip }> {
   validate(command);
-  const client: Client = { ...command.client, lastSavedAt: command.recordedAt };
+  const client = command.client ? { ...command.client, lastSavedAt: command.recordedAt } : undefined;
   const derivedTrip = { ...deriveTripInterval(command.trip, command.services), lastSavedAt: command.recordedAt };
   let savedTrip = derivedTrip;
   await repository.transact(async (tx) => {
+    const currentClient = await tx.getClient(derivedTrip.clientId);
+    if (currentClient && !client) throw new Error('trip workspace requires its live client');
+    if (!currentClient) {
+      const deletedClient = await tx.getDeletedRecordReference(`client:${derivedTrip.clientId}`);
+      if (deletedClient && client) throw new Error('trip workspace cannot recreate a deleted client');
+      if (!deletedClient && !client) throw new Error('trip workspace has a missing client relationship');
+    }
     const previousTrip = await tx.getTrip(derivedTrip.id);
     const rateChanged = previousTrip ? referenceRateChanged(previousTrip, derivedTrip) : false;
     if (previousTrip?.referenceExchangeRate !== undefined && rateChanged && !command.referenceRateChangeConfirmed) {
@@ -89,7 +96,7 @@ export async function saveTripWorkspace(repository: WorkspaceRepository, command
       : { ...derivedTrip, referenceExchangeRateLockedAt: command.recordedAt };
     savedTrip = trip;
     const events = [
-      createActivityEvent({ aggregateType: 'client', aggregateId: client.id, type: 'client_workspace_saved', occurredAt: command.occurredAt, recordedAt: command.recordedAt, payload: { tripId: trip.id } }),
+      ...(client ? [createActivityEvent({ aggregateType: 'client', aggregateId: client.id, type: 'client_workspace_saved', occurredAt: command.occurredAt, recordedAt: command.recordedAt, payload: { tripId: trip.id } })] : []),
       createActivityEvent({ aggregateType: 'trip', aggregateId: trip.id, type: 'trip_workspace_saved', occurredAt: command.occurredAt, recordedAt: command.recordedAt, payload: { serviceCount: command.services.length, additionalItemCount: command.serviceAdditionalItems?.length ?? 0, noteCount: command.notes.length } }),
       ...(rateChanged ? [createActivityEvent({
         aggregateType: 'trip',
@@ -106,7 +113,7 @@ export async function saveTripWorkspace(repository: WorkspaceRepository, command
         },
       })] : []),
     ];
-    await tx.putClient(client);
+    if (client) await tx.putClient(client);
     await tx.putTrip(trip);
     for (const service of command.services) await tx.putService(service);
     for (const item of command.serviceAdditionalItems ?? []) await tx.putServiceAdditionalItem(item);

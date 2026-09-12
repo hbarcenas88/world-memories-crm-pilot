@@ -42,6 +42,18 @@ describe('CommissionBoard', () => {
     expect(totals.textContent).toContain('200.00 MXN');
   });
 
+  it('keeps a deliberately deleted Provider explicit on its surviving Commission', () => {
+    render(<CommissionBoard
+      commissions={[{ id: 'commission-historical-provider', tripId: 'trip-1', providerId: 'provider-deleted', expected: { amount: 100, currency: 'USD' }, status: 'expected', createdAt: '2026-08-01T00:00:00.000Z' }]}
+      deletedReferences={[{ key: 'provider:provider-deleted', kind: 'provider', id: 'provider-deleted', displayLabel: 'Hotel histórico', deletedAt: '2026-09-07T10:00:00.000Z', eventDisposition: 'kept' }]}
+      onMarkPaid={vi.fn()}
+      providers={[]}
+    />);
+
+    expect(screen.getByText('Registro eliminado: Hotel histórico')).toBeTruthy();
+    expect(screen.queryByText('Sin proveedor')).toBeNull();
+  });
+
   it('keeps archived commissions out of the active board and exposes their visible lifecycle action', async () => {
     const user = userEvent.setup();
     const loadImpact = vi.fn().mockResolvedValue({ target: { kind: 'commission', id: 'archived' }, title: 'Comisión', dependencies: [], canDelete: true });

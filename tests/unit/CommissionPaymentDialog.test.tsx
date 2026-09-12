@@ -7,6 +7,48 @@ import { CommissionPaymentDialog } from '../../src/features/commissions/Commissi
 afterEach(cleanup);
 
 describe('CommissionPaymentDialog', () => {
+  it('formats the received commission amount while confirming its unlocalized number', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(<CommissionPaymentDialog commission={{ id: 'commission-1', tripId: 'trip-1', providerId: 'provider-1', expected: { amount: 100, currency: 'USD' }, status: 'expected', createdAt: '2026-08-01T00:00:00.000Z' }} onCancel={vi.fn()} onConfirm={onConfirm} />);
+
+    await user.clear(screen.getByLabelText('Importe recibido'));
+    await user.type(screen.getByLabelText('Importe recibido'), '1234.5');
+
+    expect((screen.getByLabelText('Importe recibido') as HTMLInputElement).value).toBe('1,234.5');
+
+    await user.click(screen.getByLabelText('Confirmo la diferencia'));
+    await user.click(screen.getByRole('button', { name: 'Guardar pago' }));
+
+    expect(onConfirm).toHaveBeenCalledWith({ amount: 1234.5, currency: 'USD' }, true, expect.any(String), undefined);
+  });
+
+  it('asks before discarding a changed commission payment draft', async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    render(<CommissionPaymentDialog commission={{ id: 'commission-1', tripId: 'trip-1', providerId: 'provider-1', expected: { amount: 100, currency: 'USD' }, status: 'expected', createdAt: '2026-08-01T00:00:00.000Z' }} onCancel={onCancel} onConfirm={vi.fn()} />);
+
+    await user.clear(screen.getByLabelText('Importe recibido'));
+    await user.type(screen.getByLabelText('Importe recibido'), '95');
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    expect(screen.getByRole('dialog', { name: 'Cambios sin guardar' })).toBeTruthy();
+    expect(onCancel).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Salir sin guardar' }));
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
+
+  it('treats a changed effective payment date as a draft to protect', async () => {
+    const user = userEvent.setup();
+    render(<CommissionPaymentDialog commission={{ id: 'commission-1', tripId: 'trip-1', providerId: 'provider-1', expected: { amount: 100, currency: 'USD' }, status: 'expected', createdAt: '2026-08-01T00:00:00.000Z' }} onCancel={vi.fn()} onConfirm={vi.fn()} />);
+
+    await user.clear(screen.getByLabelText('Fecha efectiva de pago'));
+    await user.type(screen.getByLabelText('Fecha efectiva de pago'), '31/08/2026');
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    expect(screen.getByRole('dialog', { name: 'Cambios sin guardar' })).toBeTruthy();
+  });
+
   it('requires confirmation for a different received currency and sends the effective payment date', async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();

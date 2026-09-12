@@ -1,6 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { t, useLocale } from "../../app/i18n";
 import { OperationalDateField } from "../../design/components/OperationalDateField";
+import { AmountField } from '../../design/components/AmountField';
+import { CountryPicker } from '../../design/components/CountryPicker';
+import { PhoneField } from '../../design/components/PhoneField';
+import { validateOptionalEmail } from "../../domain/contactValidation";
+import { useUnsavedChangesGuard } from "../../app/useUnsavedChangesGuard";
+import { UnsavedChangesDialog } from "../trips/UnsavedChangesDialog";
 export type LeadFormValue = Readonly<{
   name: string;
   acquisitionSource: string;
@@ -66,28 +72,43 @@ export function LeadForm({
   const [value, setValue] = useState<LeadFormValue>(
     () => initialValue ?? emptyLeadFormValue,
   );
-  const [budgetText, setBudgetText] = useState(
-    () => initialValue?.budgetAmount?.toString() ?? "",
-  );
+  const [budgetAmount, setBudgetAmount] = useState<number | undefined>(initialValue?.budgetAmount);
+  const [isBudgetValid, setIsBudgetValid] = useState(true);
   const [error, setError] = useState("");
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const label = (key: import("../../app/i18n").TranslationKey) =>
     t(key, locale);
   const update = <Key extends keyof LeadFormValue>(
     key: Key,
     next: LeadFormValue[Key],
   ) => setValue((current) => ({ ...current, [key]: next }));
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    const budgetAmount = budgetText === "" ? undefined : Number(budgetText);
+  const hasUnsavedChanges = JSON.stringify({ value, budgetAmount, isBudgetValid }) !== JSON.stringify({ value: initialValue ?? emptyLeadFormValue, budgetAmount: initialValue?.budgetAmount, isBudgetValid: true });
+  const emailValidation = validateOptionalEmail(value.email);
+  useUnsavedChangesGuard(hasUnsavedChanges);
+  function save(): boolean {
+    if (!emailValidation.valid) {
+      setError(label("invalidEmail"));
+      return false;
+    }
+    if (!isBudgetValid) {
+      setError(label("invalidBudgetAmount"));
+      return false;
+    }
     if (budgetAmount !== undefined && !value.budgetCurrency) {
       setError(label("budgetCurrencyRequired"));
-      return;
+      return false;
     }
     setError("");
     onSave({
       ...value,
+      email: emailValidation.value,
       ...(budgetAmount === undefined ? {} : { budgetAmount }),
     });
+    return true;
+  }
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    save();
   }
   const sourceOptions = [
     ...new Set(["", ...acquisitionSources, value.acquisitionSource]),
@@ -151,16 +172,8 @@ export function LeadForm({
         )}
         <label>
           {label("phone")}
-          <input
-            aria-label={label("phone")}
-            value={value.phone}
-            onChange={(event) => update("phone", event.target.value)}
-          />
+          <PhoneField countryLabel={label('internationalPhoneCode')} label={label('phone')} onChange={(phone) => update('phone', phone)} value={value.phone} />
         </label>
-        {value.requestedDateStatus === "dates_known" && <>
-          <label>{label("tentativeStart")}<OperationalDateField aria-label={label("tentativeStart")} onChange={(next) => update("requestedStartOn", next)} value={value.requestedStartOn} /></label>
-          <label>{label("tentativeEnd")}<OperationalDateField aria-label={label("tentativeEnd")} onChange={(next) => update("requestedEndOn", next)} value={value.requestedEndOn} /></label>
-        </>}
         <label>{label("adults")}<input aria-label={label("adults")} inputMode="numeric" min="0" onChange={(event) => update("adults", event.target.value === "" ? undefined : Number(event.target.value))} type="number" value={value.adults ?? ""} /></label>
         <label>{label("children")}<input aria-label={label("children")} inputMode="numeric" min="0" onChange={(event) => update("children", event.target.value === "" ? undefined : Number(event.target.value))} type="number" value={value.children ?? ""} /></label>
         <label>{label("commercialNote")}<textarea aria-label={label("commercialNote")} onChange={(event) => update("commercialNote", event.target.value)} value={value.commercialNote ?? ""} /></label>
@@ -168,18 +181,17 @@ export function LeadForm({
           {label("email")}
           <input
             aria-label={label("email")}
+            aria-describedby={!emailValidation.valid ? "lead-email-error" : undefined}
+            aria-invalid={!emailValidation.valid}
             type="email"
             value={value.email}
             onChange={(event) => update("email", event.target.value)}
           />
+          {!emailValidation.valid && <small className="form-error" id="lead-email-error">{label("invalidEmail")}</small>}
         </label>
         <label>
           {label("residenceCountry")}
-          <input
-            aria-label={label("residenceCountry")}
-            value={value.residenceCountry}
-            onChange={(event) => update("residenceCountry", event.target.value)}
-          />
+          <CountryPicker label={label('residenceCountry')} onChange={(residenceCountry) => update('residenceCountry', residenceCountry)} value={value.residenceCountry} />
         </label>
         <label>
           {label("initialDestination")}
@@ -219,13 +231,15 @@ export function LeadForm({
             <option value="dates_known">{label("datesKnown")}</option>
           </select>
         </label>
+        {value.requestedDateStatus === "dates_known" && <div className="lead-date-range"><label>{label("tentativeStart")}<OperationalDateField aria-label={label("tentativeStart")} onChange={(next) => update("requestedStartOn", next)} value={value.requestedStartOn} /></label><label>{label("tentativeEnd")}<OperationalDateField aria-label={label("tentativeEnd")} onChange={(next) => update("requestedEndOn", next)} value={value.requestedEndOn} /></label></div>}
         <label>
           {label("budget")}
-          <input
-            aria-label={label("budget")}
-            inputMode="decimal"
-            value={budgetText}
-            onChange={(event) => setBudgetText(event.target.value)}
+          <AmountField
+            errorMessage={label("invalidBudgetAmount")}
+            label={label("budget")}
+            onChange={setBudgetAmount}
+            onValidityChange={setIsBudgetValid}
+            value={budgetAmount}
           />
         </label>
         <label>
@@ -255,7 +269,7 @@ export function LeadForm({
       )}
       <div className="form-actions">
         {onCancel && (
-          <button className="secondary-button" type="button" onClick={onCancel}>
+          <button className="secondary-button" type="button" onClick={() => hasUnsavedChanges ? setShowUnsavedDialog(true) : onCancel()}>
             {label("cancel")}
           </button>
         )}
@@ -263,6 +277,7 @@ export function LeadForm({
           {label("saveLead")}
         </button>
       </div>
+      {showUnsavedDialog && <UnsavedChangesDialog onCancel={() => setShowUnsavedDialog(false)} onDiscard={() => onCancel?.()} onSave={() => { if (save()) setShowUnsavedDialog(false); }} />}
     </form>
   );
 }

@@ -38,4 +38,18 @@ describe('searchWorkspace', () => {
 
     expect(results).toEqual([{ id: 'lead-1', kind: 'lead', label: 'Familia Rivera', context: 'Prefieren un aniversario íntimo en la playa.' }]);
   });
+
+  it('finds a surviving Trip by its explicit deleted Client context instead of exposing the historical ID', () => {
+    const results = searchWorkspace('familia historica', {
+      clients: [],
+      commissions: [],
+      deletedReferences: [{ key: 'client:client-deleted', kind: 'client', id: 'client-deleted', displayLabel: 'Familia histórica', deletedAt: '2026-09-07T10:00:00.000Z', eventDisposition: 'kept' }],
+      leads: [],
+      providers: [],
+      tasks: [],
+      trips: [{ id: 'trip-historical', leadId: 'lead-1', clientId: 'client-deleted', status: 'active', createdAt: '2026-08-20T00:00:00.000Z' }],
+    });
+
+    expect(results).toEqual([{ id: 'trip-historical', kind: 'trip', label: 'Viaje: Registro eliminado: Familia histórica' }]);
+  });
 });

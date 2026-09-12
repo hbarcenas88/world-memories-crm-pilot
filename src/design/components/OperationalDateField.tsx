@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useLocale } from "../../app/i18n";
+import { useDismissibleLayer } from "../hooks/useDismissibleLayer";
 import {
   formatOperationalDate,
   parseOperationalDate,
@@ -10,6 +12,7 @@ type OperationalDateFieldProps = Readonly<{
   onChange: (value: string) => void;
   "aria-label": string;
   disabled?: boolean;
+  onValidityChange?: (valid: boolean) => void;
 }>;
 
 function monthStart(value: string | undefined): Date {
@@ -26,6 +29,7 @@ function OperationalDateFieldState({
   onChange,
   "aria-label": label,
   disabled,
+  onValidityChange,
 }: OperationalDateFieldProps) {
   const locale = useLocale();
   const copy =
@@ -46,6 +50,20 @@ function OperationalDateFieldState({
         };
   const [draft, setDraft] = useState(value ? formatOperationalDate(value) : "");
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [focusedDate, setFocusedDate] = useState(value ?? toIso(new Date()));
+  const calendarTriggerRef = useRef<HTMLButtonElement>(null);
+  const calendarRef = useRef<HTMLSpanElement>(null);
+  const fieldRef = useRef<HTMLSpanElement>(null);
+  useDismissibleLayer({ isOpen: calendarOpen, onDismiss: () => setCalendarOpen(false), rootRef: fieldRef });
+  const validDraft = draft.trim() === "" || Boolean(parseOperationalDate(draft));
+  useEffect(() => {
+    const nextDraft = value ? formatOperationalDate(value) : "";
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setDraft((current) => current === nextDraft ? current : nextDraft);
+    });
+    return () => { cancelled = true; };
+  }, [value]);
   const [month, setMonth] = useState(() => monthStart(value));
   const days = useMemo(() => {
     const firstWeekday = (month.getDay() + 6) % 7;
@@ -66,24 +84,59 @@ function OperationalDateFieldState({
   }, [month]);
   const commit = () => {
     if (draft.trim() === "") {
+      onValidityChange?.(true);
       onChange("");
       return;
     }
     const parsed = parseOperationalDate(draft);
     if (parsed) {
       setDraft(formatOperationalDate(parsed));
+      onValidityChange?.(true);
       onChange(parsed);
+    } else {
+      onValidityChange?.(false);
     }
+  };
+  const selectDate = (nextValue: string) => {
+    setDraft(formatOperationalDate(nextValue));
+    setFocusedDate(nextValue);
+    onValidityChange?.(true);
+    onChange(nextValue);
+    setCalendarOpen(false);
+    queueMicrotask(() => calendarTriggerRef.current?.focus());
+  };
+  const focusCalendarDate = (next: Date) => {
+    const nextValue = toIso(next);
+    setFocusedDate(nextValue);
+    setMonth(new Date(next.getFullYear(), next.getMonth(), 1));
+    requestAnimationFrame(() => calendarRef.current?.querySelector<HTMLButtonElement>(`[data-operational-date="${nextValue}"]`)?.focus());
+  };
+  const onDayKeyDown = (event: KeyboardEvent<HTMLButtonElement>, day: Date) => {
+    if (event.key === 'Escape') {
+      event.preventDefault(); setCalendarOpen(false); queueMicrotask(() => calendarTriggerRef.current?.focus()); return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectDate(toIso(day)); return; }
+    const weekday = (day.getDay() + 6) % 7;
+    const offset = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : event.key === 'ArrowUp' ? -7 : event.key === 'ArrowDown' ? 7 : event.key === 'Home' ? -weekday : event.key === 'End' ? 6 - weekday : undefined;
+    if (offset !== undefined) { event.preventDefault(); focusCalendarDate(new Date(day.getFullYear(), day.getMonth(), day.getDate() + offset)); return; }
+    if (event.key === 'PageUp' || event.key === 'PageDown') { event.preventDefault(); focusCalendarDate(new Date(day.getFullYear(), day.getMonth() + (event.key === 'PageUp' ? -1 : 1), day.getDate())); }
   };
   const typeDate = (nextDraft: string) => {
     setDraft(nextDraft);
     const parsed = parseOperationalDate(nextDraft);
+    if (nextDraft.trim() === "") {
+      onValidityChange?.(true);
+      onChange("");
+      return;
+    }
+    onValidityChange?.(Boolean(parsed));
     if (parsed) onChange(parsed);
   };
   return (
-    <span className="operational-date-field">
+    <span className="operational-date-field" ref={fieldRef}>
       <input
         aria-label={label}
+        aria-invalid={!validDraft || undefined}
         disabled={disabled}
         inputMode="numeric"
         onBlur={commit}
@@ -97,15 +150,26 @@ function OperationalDateFieldState({
         aria-label={`${copy.open}: ${label}`}
         className="icon-button"
         disabled={disabled}
-        onClick={() => setCalendarOpen((open) => !open)}
+        onClick={() => setCalendarOpen((open) => {
+          const nextOpen = !open;
+          if (nextOpen) {
+            const nextValue = parseOperationalDate(draft) ?? value ?? toIso(new Date());
+            setFocusedDate(nextValue);
+            setMonth(monthStart(nextValue));
+            requestAnimationFrame(() => calendarRef.current?.querySelector<HTMLButtonElement>(`[data-operational-date="${nextValue}"]`)?.focus());
+          }
+          return nextOpen;
+        })}
+        ref={calendarTriggerRef}
         type="button"
       >
-        ▦
+        <CalendarDays aria-hidden="true" size={18} />
       </button>
       {calendarOpen && (
         <span
           aria-label={`${copy.calendar}: ${label}`}
           className="operational-calendar"
+          ref={calendarRef}
           role="dialog"
         >
           <span className="calendar-month-controls">
@@ -120,7 +184,7 @@ function OperationalDateFieldState({
               }
               type="button"
             >
-              ‹
+              <ChevronLeft aria-hidden="true" size={18} />
             </button>
             <strong>
               {new Intl.DateTimeFormat(locale === "es" ? "es" : "en-US", {
@@ -139,7 +203,7 @@ function OperationalDateFieldState({
               }
               type="button"
             >
-              ›
+              <ChevronRight aria-hidden="true" size={18} />
             </button>
           </span>
           <span className="calendar-grid" role="grid">
@@ -153,14 +217,12 @@ function OperationalDateFieldState({
                 <button
                   aria-label={formatOperationalDate(toIso(day))}
                   aria-selected={value === toIso(day)}
+                  data-operational-date={toIso(day)}
                   key={toIso(day)}
-                  onClick={() => {
-                    const nextValue = toIso(day);
-                    setDraft(formatOperationalDate(nextValue));
-                    onChange(nextValue);
-                    setCalendarOpen(false);
-                  }}
+                  onClick={() => selectDate(toIso(day))}
+                  onKeyDown={(event) => onDayKeyDown(event, day)}
                   role="gridcell"
+                  tabIndex={focusedDate === toIso(day) ? 0 : -1}
                   type="button"
                 >
                   {day.getDate()}
@@ -177,5 +239,5 @@ function OperationalDateFieldState({
 }
 
 export function OperationalDateField(props: OperationalDateFieldProps) {
-  return <OperationalDateFieldState key={props.value ?? ""} {...props} />;
+  return <OperationalDateFieldState {...props} />;
 }

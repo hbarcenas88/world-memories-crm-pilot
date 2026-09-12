@@ -14,6 +14,7 @@ export async function exportOperationalExcel(workspace: WorkspaceSnapshot): Prom
     sheet('Conceptos adicionales', ['ID', 'Servicio', 'Concepto', 'Importe', 'Moneda'], workspace.serviceAdditionalItems.map((item) => [item.id, item.serviceId, item.label, item.amount, item.currency])),
     sheet('Comisiones', ['ID', 'Viaje', 'Proveedor', 'Estado', 'Esperado', 'Moneda', 'Fecha esperada', 'Tasa base', 'Tasa cotizada', 'Tasa de proyección', 'Origen de tasa', 'Importe de referencia'], workspace.commissions.map((commission) => [commission.id, commission.tripId, commission.providerId, commission.status, commission.expected.amount, commission.expected.currency, commission.dueOn, commission.projectionRateBaseCurrency, commission.projectionRateQuoteCurrency, commission.projectionExchangeRate, commission.projectionRateSource, commission.projectedReferenceAmount?.amount])),
     sheet('Tareas', ['ID', 'Título', 'Estado', 'Vence', 'Hora', 'Lead', 'Viaje', 'Comisión', 'Origen'], workspace.tasks.map((task) => [task.id, task.title, task.status, task.dueOn, task.dueTime, task.leadId, task.tripId, task.commissionId, task.source])),
+    sheet('Referencias eliminadas', ['Tipo', 'ID', 'Etiqueta histórica', 'Eliminado', 'Eventos propios', 'Clave de automatización'], workspace.deletedRecordReferences.map((reference) => [reference.kind, reference.id, reference.displayLabel, reference.deletedAt, reference.eventDisposition, reference.automationKey])),
   ]);
   return output.toBlob();
 }

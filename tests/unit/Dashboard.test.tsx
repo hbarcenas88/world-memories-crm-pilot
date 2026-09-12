@@ -23,6 +23,20 @@ describe('Dashboard', () => {
     expect(screen.getByText('Confirmar itinerario')).toBeTruthy();
   });
 
+  it('keeps the Client context explicit for a surviving Trip whose Client was deleted', () => {
+    render(<Dashboard
+      clients={[]}
+      commissions={[]}
+      deletedReferences={[{ key: 'client:client-deleted', kind: 'client', id: 'client-deleted', displayLabel: 'Familia histórica', deletedAt: '2026-09-07T10:00:00.000Z', eventDisposition: 'kept' }]}
+      leads={[]}
+      tasks={[]}
+      today="2026-08-26"
+      trips={[{ id: 'trip-historical', leadId: 'lead-1', clientId: 'client-deleted', status: 'active', createdAt: '2026-08-20T00:00:00.000Z', effectiveStartOn: '2026-08-25', effectiveEndOn: '2026-08-30' }]}
+    />);
+
+    expect(screen.getAllByText('Viaje de Registro eliminado: Familia histórica')).toHaveLength(2);
+  });
+
   it('opens trips and lets the operator complete or reprogram an overdue task from its queue', async () => {
     const user = userEvent.setup();
     const onOpenTrip = vi.fn();
@@ -31,7 +45,9 @@ describe('Dashboard', () => {
     render(<Dashboard today="2026-08-26" leads={[]} commissions={[]} onCompleteTask={onCompleteTask} onOpenTrip={onOpenTrip} onRescheduleTask={onRescheduleTask} tasks={[{ id: 'task-1', title: 'Confirmar itinerario', required: false, dueOn: '2026-08-25', status: 'open', createdAt: '2026-08-20T00:00:00.000Z' }]} trips={[{ id: 'trip-current', leadId: 'lead-1', clientId: 'client-1', status: 'active', createdAt: '2026-08-20T00:00:00.000Z', effectiveStartOn: '2026-08-25', effectiveEndOn: '2026-08-30' }]} />);
 
     await user.click(screen.getAllByRole('button', { name: 'Abrir viaje' })[0]);
+    await user.click(screen.getByRole('button', { name: 'Reprogramar tarea' }));
     fireEvent.change(screen.getByLabelText('Nueva fecha para Confirmar itinerario'), { target: { value: '01/09/2026' } });
+    await user.click(screen.getByRole('button', { name: 'Aplicar fecha' }));
     await user.click(screen.getByRole('button', { name: 'Completar Confirmar itinerario' }));
 
     expect(onOpenTrip).toHaveBeenCalledWith('trip-current');

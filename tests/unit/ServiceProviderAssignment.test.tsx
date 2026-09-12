@@ -7,6 +7,52 @@ import { ServiceProviderAssignment } from '../../src/features/trips/ServiceProvi
 afterEach(cleanup);
 
 describe('ServiceProviderAssignment', () => {
+  it('formats a sale amount for editing while assigning its unlocalized number', async () => {
+    const user = userEvent.setup();
+    const onAssign = vi.fn().mockResolvedValue({ serviceProvider: { id: 'component-1' }, suggestedTasks: [] });
+    render(<ServiceProviderAssignment
+      onAssign={onAssign}
+      onCreateSuggestedTasks={vi.fn().mockResolvedValue(undefined)}
+      onReactivateProvider={vi.fn().mockResolvedValue(undefined)}
+      providers={[{ id: 'provider-1', name: 'Hotel Aurora', status: 'active', allowedCurrencies: ['USD'], createdAt: '2026-08-26T12:00:00.000Z' }]}
+      services={[{ id: 'service-1', tripId: 'trip-1', name: 'Hotel familiar', status: 'active', createdAt: '2026-08-26T12:00:00.000Z' }]}
+    />);
+
+    await user.selectOptions(screen.getByLabelText('Servicio para Proveedor'), 'service-1');
+    await user.selectOptions(screen.getByLabelText('Proveedor para Servicio'), 'provider-1');
+    await user.selectOptions(screen.getByLabelText('Moneda del componente'), 'USD');
+    await user.type(screen.getByLabelText('Importe de venta'), '1234.5');
+
+    expect((screen.getByLabelText('Importe de venta') as HTMLInputElement).value).toBe('1,234.5');
+
+    await user.click(screen.getByRole('button', { name: 'Agregar Proveedor al Servicio' }));
+
+    expect(onAssign).toHaveBeenCalledWith(expect.objectContaining({ amount: 1234.5 }));
+  });
+
+  it('formats the variable gross commission while assigning its unlocalized number', async () => {
+    const user = userEvent.setup();
+    const onAssign = vi.fn().mockResolvedValue({ serviceProvider: { id: 'component-1' }, suggestedTasks: [] });
+    render(<ServiceProviderAssignment
+      onAssign={onAssign}
+      onCreateSuggestedTasks={vi.fn().mockResolvedValue(undefined)}
+      onReactivateProvider={vi.fn().mockResolvedValue(undefined)}
+      providers={[{ id: 'provider-1', name: 'Hotel Aurora', status: 'active', allowedCurrencies: ['USD'], grossCommissionMode: 'variable_amount_per_service', createdAt: '2026-08-26T12:00:00.000Z' }]}
+      services={[{ id: 'service-1', tripId: 'trip-1', name: 'Hotel familiar', status: 'active', createdAt: '2026-08-26T12:00:00.000Z' }]}
+    />);
+
+    await user.selectOptions(screen.getByLabelText('Servicio para Proveedor'), 'service-1');
+    await user.selectOptions(screen.getByLabelText('Proveedor para Servicio'), 'provider-1');
+    await user.selectOptions(screen.getByLabelText('Moneda del componente'), 'USD');
+    await user.type(screen.getByLabelText('Comisión bruta esperada'), '9876.5');
+
+    expect((screen.getByLabelText('Comisión bruta esperada') as HTMLInputElement).value).toBe('9,876.5');
+
+    await user.click(screen.getByRole('button', { name: 'Agregar Proveedor al Servicio' }));
+
+    expect(onAssign).toHaveBeenCalledWith(expect.objectContaining({ variableGrossCommissionAmount: 9876.5 }));
+  });
+
   it('requires an explicit allowed currency and captures sale amount plus balance due date', async () => {
     const user = userEvent.setup();
     const onAssign = vi.fn().mockResolvedValue({ serviceProvider: { id: 'component-1' }, suggestedTasks: [] });

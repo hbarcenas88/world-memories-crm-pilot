@@ -3,6 +3,11 @@ import { t, useLocale } from '../../app/i18n';
 import { ageAtDate } from '../../domain/dates';
 import type { Client, FamilyMember } from '../../domain/types';
 import { OperationalDateField } from '../../design/components/OperationalDateField';
+import { CountryPicker } from '../../design/components/CountryPicker';
+import { PhoneField } from '../../design/components/PhoneField';
+import { validateOptionalEmail } from '../../domain/contactValidation';
+import { useUnsavedChangesGuard } from '../../app/useUnsavedChangesGuard';
+import { UnsavedChangesDialog } from '../trips/UnsavedChangesDialog';
 
 export type ClientFormValue = Readonly<{
   name: string;
@@ -31,6 +36,18 @@ export function ClientForm({ client, onCancel, onSave }: ClientFormProps) {
   const [memberBirthDate, setMemberBirthDate] = useState('');
   const [memberRelationship, setMemberRelationship] = useState('');
   const [memberError, setMemberError] = useState<string>();
+  const [contactError, setContactError] = useState<string>();
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+
+  const initialDraft = {
+    value: {
+      name: client?.name ?? '', familyNote: client?.familyNote ?? '', residenceCountry: client?.residenceCountry, address: client?.address, phone: client?.phone, email: client?.email,
+    },
+    members: client?.members ?? [], memberName: '', memberBirthDate: '', memberRelationship: '',
+  };
+  const hasUnsavedChanges = JSON.stringify({ value, members, memberName, memberBirthDate, memberRelationship }) !== JSON.stringify(initialDraft);
+  const emailValidation = validateOptionalEmail(value.email);
+  useUnsavedChangesGuard(hasUnsavedChanges);
 
   function updateMember(memberId: string, changes: Partial<FamilyMember>): void {
     setMembers((current) => current.map((member) => member.id === memberId ? { ...member, ...changes } : member));
@@ -55,8 +72,12 @@ export function ClientForm({ client, onCancel, onSave }: ClientFormProps) {
     setMemberError(undefined);
   }
 
-  function submit(event: FormEvent): void {
-    event.preventDefault();
+  function save(): boolean {
+    if (!emailValidation.valid) {
+      setContactError(label('invalidEmail'));
+      return false;
+    }
+    setContactError(undefined);
     onSave({
       name: value.name,
       familyNote: value.familyNote,
@@ -64,19 +85,26 @@ export function ClientForm({ client, onCancel, onSave }: ClientFormProps) {
       ...(value.residenceCountry ? { residenceCountry: value.residenceCountry } : {}),
       ...(value.address ? { address: value.address } : {}),
       ...(value.phone ? { phone: value.phone } : {}),
-      ...(value.email ? { email: value.email } : {}),
+      ...(emailValidation.value ? { email: emailValidation.value } : {}),
     });
+    return true;
+  }
+
+  function submit(event: FormEvent): void {
+    event.preventDefault();
+    save();
   }
 
   return <form className="lead-form" noValidate onSubmit={submit}>
     <div className="form-grid">
       <label>{label('clientOrFamilyName')}<input aria-label={label('clientOrFamilyName')} value={value.name} onChange={(event) => setValue((current) => ({ ...current, name: event.target.value }))} /></label>
-      <label>{label('phone')}<input aria-label={label('phone')} value={value.phone ?? ''} onChange={(event) => setValue((current) => ({ ...current, phone: event.target.value }))} /></label>
-      <label>{label('email')}<input aria-label={label('email')} type="email" value={value.email ?? ''} onChange={(event) => setValue((current) => ({ ...current, email: event.target.value }))} /></label>
-      <label>{label('residenceCountry')}<input aria-label={label('residenceCountry')} value={value.residenceCountry ?? ''} onChange={(event) => setValue((current) => ({ ...current, residenceCountry: event.target.value }))} /></label>
+      <label>{label('phone')}<PhoneField countryLabel={label('internationalPhoneCode')} label={label('phone')} onChange={(phone) => setValue((current) => ({ ...current, phone }))} value={value.phone ?? ''} /></label>
+      <label>{label('email')}<input aria-describedby={!emailValidation.valid ? 'client-email-error' : undefined} aria-invalid={!emailValidation.valid} aria-label={label('email')} type="email" value={value.email ?? ''} onChange={(event) => setValue((current) => ({ ...current, email: event.target.value }))} />{!emailValidation.valid && <small className="form-error" id="client-email-error">{label('invalidEmail')}</small>}</label>
+      <label>{label('residenceCountry')}<CountryPicker label={label('residenceCountry')} onChange={(residenceCountry) => setValue((current) => ({ ...current, residenceCountry }))} value={value.residenceCountry ?? ''} /></label>
       <label>{label('address')}<input aria-label={label('address')} value={value.address ?? ''} onChange={(event) => setValue((current) => ({ ...current, address: event.target.value }))} /></label>
       <label>{label('usefulFamilyNote')}<textarea aria-label={label('usefulFamilyNote')} value={value.familyNote} onChange={(event) => setValue((current) => ({ ...current, familyNote: event.target.value }))} /></label>
     </div>
+    {contactError && <p className="form-error" role="alert">{contactError}</p>}
     <section className="detail-section" aria-label={label('members')}>
       <h3>{label('members')}</h3>
       {members.length === 0 ? <p className="muted-copy">{label('noMembers')}</p> : <div className="member-list">{members.map((member) => <div className="member-row" key={member.id}>
@@ -94,6 +122,7 @@ export function ClientForm({ client, onCancel, onSave }: ClientFormProps) {
       {memberError && <p className="form-error" role="alert">{memberError}</p>}
       <button className="secondary-button" onClick={addMember} type="button">{label('addMember')}</button>
     </section>
-    <div className="form-actions"><button className="secondary-button" onClick={onCancel} type="button">{label('cancel')}</button><button className="primary-button" type="submit">{label('saveClient')}</button></div>
+    <div className="form-actions"><button className="secondary-button" onClick={() => hasUnsavedChanges ? setShowUnsavedDialog(true) : onCancel()} type="button">{label('cancel')}</button><button className="primary-button" type="submit">{label('saveClient')}</button></div>
+    {showUnsavedDialog && <UnsavedChangesDialog onCancel={() => setShowUnsavedDialog(false)} onDiscard={onCancel} onSave={save} />}
   </form>;
 }

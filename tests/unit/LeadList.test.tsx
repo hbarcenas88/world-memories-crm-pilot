@@ -52,7 +52,7 @@ describe("LeadList", () => {
       screen.getByLabelText("Nombre o referencia").getAttribute("value"),
     ).toBe("Ana Rivera");
     expect(screen.getByLabelText("Presupuesto").getAttribute("value")).toBe(
-      "2800",
+      "2,800",
     );
   });
 
@@ -92,6 +92,18 @@ describe("LeadList", () => {
     await user.click(screen.getByRole("button", { name: "Archivados" }));
     expect(screen.getByText("Consulta archivada")).toBeTruthy();
     expect(screen.getByText("Archivado")).toBeTruthy();
+  });
+
+  it("shows both active and archived Leads when Todos is selected", async () => {
+    const user = userEvent.setup();
+    render(<LeadList leads={[
+      { id: 'active', name: 'Consulta activa', acquisitionSource: 'Web', requestedDateStatus: 'dates_to_define', status: 'contacted', createdAt: '2026-08-29T00:00:00.000Z' },
+      { id: 'archived', name: 'Consulta archivada', acquisitionSource: 'Referido', requestedDateStatus: 'dates_to_define', status: 'paused', createdAt: '2026-08-29T00:00:00.000Z', archivedAt: '2026-08-29T01:00:00.000Z' },
+    ]} locale="es" onCancel={vi.fn()} onSave={vi.fn()} onSelect={vi.fn()} showForm={false} />);
+
+    await user.click(screen.getByRole('button', { name: 'Todos' }));
+    expect(screen.getByText('Consulta activa')).toBeTruthy();
+    expect(screen.getByText('Consulta archivada')).toBeTruthy();
   });
 
   it("renders Lead status labels instead of persisted status identifiers", () => {

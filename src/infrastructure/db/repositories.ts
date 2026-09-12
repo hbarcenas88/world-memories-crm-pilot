@@ -1,20 +1,20 @@
 import type { WorkspaceRepository, WorkspaceTransaction } from '../../application/ports';
-import type { ActivityEvent, BackupDownload, Client, Commission, Lead, Payment, Provider, ProviderTaskTemplate, RichNote, Service, ServiceAdditionalItem, ServiceProvider, Task, Trip, WorkspaceConfiguration } from '../../domain/types';
+import type { ActivityEvent, BackupDownload, Client, Commission, DeletedRecordReference, Lead, Payment, Provider, ProviderTaskTemplate, RichNote, Service, ServiceAdditionalItem, ServiceProvider, Task, Trip, WorkspaceConfiguration } from '../../domain/types';
 import { WorldMemoriesDb } from './worldMemoriesDb';
 import { assertWorkspaceSnapshot, type WorkspaceSnapshot } from '../../application/workspaceSnapshot';
-import { analyzeRecordImpact, type ManagedRecordRef } from '../../application/recordImpact';
+import { analyzeRecordImpact, type ManagedRecordRef, type RecordDeleteOptions } from '../../application/recordImpact';
 import { createDefaultWorkspaceConfiguration } from '../../domain/workspaceConfiguration';
 
 function assertEvent(event: ActivityEvent): void {
   if (event.type.trim() === '') throw new Error('activity event type is required');
 }
 
-function assertTaskReference(task: Task, lead?: Lead, trip?: Trip, service?: Service, commission?: Commission): void {
-  if (task.leadId && !lead) throw new Error('task lead not found');
-  if (task.tripId && !trip) throw new Error('task trip not found');
-  if (task.serviceProviderId && !service) throw new Error('task service provider not found');
+function assertTaskReference(task: Task, leadExists: boolean, tripExists: boolean, service?: Service, commission?: Commission, serviceExists = Boolean(service), commissionExists = Boolean(commission)): void {
+  if (task.leadId && !leadExists) throw new Error('task lead not found');
+  if (task.tripId && !tripExists) throw new Error('task trip not found');
+  if (task.serviceProviderId && !serviceExists) throw new Error('task service provider not found');
   if (task.serviceProviderId && task.tripId !== service?.tripId) throw new Error('task service provider does not belong to trip');
-  if (task.commissionId && !commission) throw new Error('task commission not found');
+  if (task.commissionId && !commissionExists) throw new Error('task commission not found');
   if (task.commissionId && task.tripId && task.tripId !== commission?.tripId) throw new Error('task commission does not belong to trip');
 }
 
@@ -130,6 +130,10 @@ export class DexieWorkspaceRepository implements WorkspaceRepository {
     return this.db.payments.where('tripId').equals(tripId).sortBy('occurredAt');
   }
 
+  async listDeletedRecordReferences(): Promise<readonly DeletedRecordReference[]> {
+    return this.db.deletedRecordReferences.toArray();
+  }
+
   async listEventsForAggregate(aggregateId: string): Promise<readonly ActivityEvent[]> {
     return this.db.activityEvents.where('aggregateId').equals(aggregateId).sortBy('occurredAt');
   }
@@ -138,20 +142,23 @@ export class DexieWorkspaceRepository implements WorkspaceRepository {
   async dismissBackupReminder(id: string, until: string): Promise<void> { const current = await this.db.backupDownloads.get(id); if (!current) throw new Error('backup download not found'); await this.db.backupDownloads.put({ ...current, reminderDismissedUntil: until }); }
 
   async snapshot(): Promise<WorkspaceSnapshot> {
-    const [leads, clients, trips, services, serviceProviders, serviceAdditionalItems, providers, providerTaskTemplates, commissions, notes, tasks, payments, events, configuration] = await Promise.all([this.db.leads.toArray(), this.db.clients.toArray(), this.db.trips.toArray(), this.db.services.toArray(), this.db.serviceProviders.toArray(), this.db.serviceAdditionalItems.toArray(), this.db.providers.toArray(), this.db.providerTaskTemplates.toArray(), this.db.commissions.toArray(), this.db.notes.toArray(), this.db.tasks.toArray(), this.db.payments.toArray(), this.db.activityEvents.toArray(), this.getConfiguration()]);
-    return { schemaVersion: 2, exportedAt: new Date().toISOString(), configuration, leads, clients, trips, services, serviceProviders, serviceAdditionalItems, providers, providerTaskTemplates, commissions, notes, tasks, payments, events };
+    const [leads, clients, trips, services, serviceProviders, serviceAdditionalItems, providers, providerTaskTemplates, commissions, notes, tasks, payments, events, configuration, deletedRecordReferences] = await Promise.all([this.db.leads.toArray(), this.db.clients.toArray(), this.db.trips.toArray(), this.db.services.toArray(), this.db.serviceProviders.toArray(), this.db.serviceAdditionalItems.toArray(), this.db.providers.toArray(), this.db.providerTaskTemplates.toArray(), this.db.commissions.toArray(), this.db.notes.toArray(), this.db.tasks.toArray(), this.db.payments.toArray(), this.db.activityEvents.toArray(), this.getConfiguration(), this.db.deletedRecordReferences.toArray()]);
+    return { schemaVersion: 3, exportedAt: new Date().toISOString(), configuration, leads, clients, trips, services, serviceProviders, serviceAdditionalItems, providers, providerTaskTemplates, commissions, notes, tasks, payments, events, deletedRecordReferences };
   }
 
   async replaceSnapshot(snapshot: WorkspaceSnapshot): Promise<void> {
     assertWorkspaceSnapshot(snapshot);
-    await this.db.transaction('rw', [this.db.leads, this.db.clients, this.db.trips, this.db.services, this.db.serviceProviders, this.db.serviceAdditionalItems, this.db.providers, this.db.providerTaskTemplates, this.db.commissions, this.db.notes, this.db.tasks, this.db.payments, this.db.activityEvents, this.db.configurations], async () => {
-      await Promise.all([this.db.leads.clear(), this.db.clients.clear(), this.db.trips.clear(), this.db.services.clear(), this.db.serviceProviders.clear(), this.db.serviceAdditionalItems.clear(), this.db.providers.clear(), this.db.providerTaskTemplates.clear(), this.db.commissions.clear(), this.db.notes.clear(), this.db.tasks.clear(), this.db.payments.clear(), this.db.activityEvents.clear(), this.db.configurations.clear()]);
-      await this.db.clients.bulkPut(snapshot.clients); await this.db.providers.bulkPut(snapshot.providers); await this.db.leads.bulkPut(snapshot.leads); await this.db.trips.bulkPut(snapshot.trips); await this.db.services.bulkPut(snapshot.services); await this.db.serviceProviders.bulkPut(snapshot.serviceProviders); await this.db.serviceAdditionalItems.bulkPut(snapshot.serviceAdditionalItems); await this.db.providerTaskTemplates.bulkPut(snapshot.providerTaskTemplates); await this.db.commissions.bulkPut(snapshot.commissions); await this.db.notes.bulkPut(snapshot.notes); await this.db.tasks.bulkPut(snapshot.tasks); await this.db.payments.bulkPut(snapshot.payments); await this.db.activityEvents.bulkPut(snapshot.events); await this.db.configurations.put(snapshot.configuration);
+    await this.db.transaction('rw', [this.db.leads, this.db.clients, this.db.trips, this.db.services, this.db.serviceProviders, this.db.serviceAdditionalItems, this.db.providers, this.db.providerTaskTemplates, this.db.commissions, this.db.notes, this.db.tasks, this.db.payments, this.db.activityEvents, this.db.configurations, this.db.deletedRecordReferences], async () => {
+      await Promise.all([this.db.leads.clear(), this.db.clients.clear(), this.db.trips.clear(), this.db.services.clear(), this.db.serviceProviders.clear(), this.db.serviceAdditionalItems.clear(), this.db.providers.clear(), this.db.providerTaskTemplates.clear(), this.db.commissions.clear(), this.db.notes.clear(), this.db.tasks.clear(), this.db.payments.clear(), this.db.activityEvents.clear(), this.db.configurations.clear(), this.db.deletedRecordReferences.clear()]);
+      await this.db.clients.bulkPut(snapshot.clients); await this.db.providers.bulkPut(snapshot.providers); await this.db.leads.bulkPut(snapshot.leads); await this.db.trips.bulkPut(snapshot.trips); await this.db.services.bulkPut(snapshot.services); await this.db.serviceProviders.bulkPut(snapshot.serviceProviders); await this.db.serviceAdditionalItems.bulkPut(snapshot.serviceAdditionalItems); await this.db.providerTaskTemplates.bulkPut(snapshot.providerTaskTemplates); await this.db.commissions.bulkPut(snapshot.commissions); await this.db.notes.bulkPut(snapshot.notes); await this.db.tasks.bulkPut(snapshot.tasks); await this.db.payments.bulkPut(snapshot.payments); await this.db.activityEvents.bulkPut(snapshot.events); await this.db.configurations.put(snapshot.configuration); await this.db.deletedRecordReferences.bulkPut(snapshot.deletedRecordReferences);
     });
   }
 
   async transact<T>(work: (tx: WorkspaceTransaction) => Promise<T>): Promise<T> {
-    return this.db.transaction('rw', [this.db.leads, this.db.clients, this.db.trips, this.db.services, this.db.providers, this.db.serviceProviders, this.db.serviceAdditionalItems, this.db.providerTaskTemplates, this.db.commissions, this.db.notes, this.db.tasks, this.db.payments, this.db.activityEvents, this.db.configurations], async () => {
+    return this.db.transaction('rw', [this.db.leads, this.db.clients, this.db.trips, this.db.services, this.db.providers, this.db.serviceProviders, this.db.serviceAdditionalItems, this.db.providerTaskTemplates, this.db.commissions, this.db.notes, this.db.tasks, this.db.payments, this.db.activityEvents, this.db.configurations, this.db.deletedRecordReferences], async () => {
+      const assertNotDeleted = async (kind: ManagedRecordRef['kind'], id: string): Promise<void> => {
+        if (await this.db.deletedRecordReferences.get(`${kind}:${id}`)) throw new Error('a deliberately deleted record ID cannot be reused');
+      };
       const tx: WorkspaceTransaction = {
         getLead: (id) => this.db.leads.get(id),
         getClient: (id) => this.db.clients.get(id),
@@ -166,9 +173,10 @@ export class DexieWorkspaceRepository implements WorkspaceRepository {
         getCommission: (id) => this.db.commissions.get(id),
         getNote: (id) => this.db.notes.get(id),
         getEvent: (id) => this.db.activityEvents.get(id),
+        getDeletedRecordReference: (key) => this.db.deletedRecordReferences.get(key),
         getConfiguration: async () => (await this.db.configurations.get('workspace-configuration')) ?? createDefaultWorkspaceConfiguration(),
         getRecordImpact: async (target) => analyzeRecordImpact({
-          schemaVersion: 2,
+          schemaVersion: 3,
           exportedAt: new Date().toISOString(),
           configuration: await this.getConfiguration(),
           leads: await this.db.leads.toArray(),
@@ -184,64 +192,72 @@ export class DexieWorkspaceRepository implements WorkspaceRepository {
           tasks: await this.db.tasks.toArray(),
           payments: await this.db.payments.toArray(),
           events: await this.db.activityEvents.toArray(),
+          deletedRecordReferences: await this.db.deletedRecordReferences.toArray(),
         }, target),
         listProviderTaskTemplates: (providerId) => this.db.providerTaskTemplates.where('providerId').equals(providerId).toArray(),
         listCommissionsForServiceProvider: async (serviceProviderId) => (await this.db.commissions.toArray()).filter((commission) => commission.serviceProviderId === serviceProviderId),
         listCommissionsForTrip: (tripId) => this.db.commissions.where('tripId').equals(tripId).toArray(),
         listTasksForTrip: (tripId) => this.db.tasks.where('tripId').equals(tripId).toArray(),
         putLead: async (lead) => {
-          if (lead.clientId && !(await this.db.clients.get(lead.clientId))) throw new Error('lead client not found');
-          if (lead.tripId && !(await this.db.trips.get(lead.tripId))) throw new Error('lead trip not found');
+          await assertNotDeleted('lead', lead.id);
+          if (lead.clientId && !(await this.db.clients.get(lead.clientId)) && !(await this.db.deletedRecordReferences.get(`client:${lead.clientId}`))) throw new Error('lead client not found');
+          if (lead.tripId && !(await this.db.trips.get(lead.tripId)) && !(await this.db.deletedRecordReferences.get(`trip:${lead.tripId}`))) throw new Error('lead trip not found');
           await this.db.leads.put(lead);
         },
-        putClient: async (client) => { await this.db.clients.put(client); },
+        putClient: async (client) => { await assertNotDeleted('client', client.id); await this.db.clients.put(client); },
         putTrip: async (trip) => {
-          if (!(await this.db.leads.get(trip.leadId))) throw new Error('trip lead not found');
-          if (!(await this.db.clients.get(trip.clientId))) throw new Error('trip client not found');
+          await assertNotDeleted('trip', trip.id);
+          if (!(await this.db.leads.get(trip.leadId)) && !(await this.db.deletedRecordReferences.get(`lead:${trip.leadId}`))) throw new Error('trip lead not found');
+          if (!(await this.db.clients.get(trip.clientId)) && !(await this.db.deletedRecordReferences.get(`client:${trip.clientId}`))) throw new Error('trip client not found');
           await this.db.trips.put(trip);
         },
         putService: async (service) => {
-          if (!(await this.db.trips.get(service.tripId))) throw new Error('service trip not found');
+          await assertNotDeleted('service', service.id);
+          if (!(await this.db.trips.get(service.tripId)) && !(await this.db.deletedRecordReferences.get(`trip:${service.tripId}`))) throw new Error('service trip not found');
           await this.db.services.put(service);
         },
-        putProvider: async (provider) => { await this.db.providers.put(provider); },
+        putProvider: async (provider) => { await assertNotDeleted('provider', provider.id); await this.db.providers.put(provider); },
         putProviderTaskTemplate: async (template) => {
-          if (!(await this.db.providers.get(template.providerId))) throw new Error('provider task template provider not found');
+          if (!(await this.db.providers.get(template.providerId)) && !(await this.db.deletedRecordReferences.get(`provider:${template.providerId}`))) throw new Error('provider task template provider not found');
           await this.db.providerTaskTemplates.put(template);
         },
         putNote: async (note) => {
           const owner = note.ownerType === 'client' ? await this.db.clients.get(note.ownerId) : await this.db.trips.get(note.ownerId);
-          if (!owner) throw new Error('note owner not found');
+          if (!owner && !(await this.db.deletedRecordReferences.get(`${note.ownerType}:${note.ownerId}`))) throw new Error('note owner not found');
           await this.db.notes.put(note);
         },
         putServiceProvider: async (serviceProvider) => {
           const [service, provider] = await Promise.all([this.db.services.get(serviceProvider.serviceId), this.db.providers.get(serviceProvider.providerId)]);
-          if (!service) throw new Error('service provider service not found');
-          if (!provider) throw new Error('service provider provider not found');
-          if (!provider.allowedCurrencies.includes(serviceProvider.currency)) throw new Error('provider does not allow selected currency');
+          if (!service && !(await this.db.deletedRecordReferences.get(`service:${serviceProvider.serviceId}`))) throw new Error('service provider service not found');
+          if (!provider && !(await this.db.deletedRecordReferences.get(`provider:${serviceProvider.providerId}`))) throw new Error('service provider provider not found');
+          if (provider && !provider.allowedCurrencies.includes(serviceProvider.currency)) throw new Error('provider does not allow selected currency');
           await this.db.serviceProviders.put(serviceProvider);
         },
         putServiceAdditionalItem: async (item) => {
-          if (!(await this.db.services.get(item.serviceId))) throw new Error('service additional item service not found');
+          if (!(await this.db.services.get(item.serviceId)) && !(await this.db.deletedRecordReferences.get(`service:${item.serviceId}`))) throw new Error('service additional item service not found');
           await this.db.serviceAdditionalItems.put(item);
         },
         putCommission: async (commission) => {
+          await assertNotDeleted('commission', commission.id);
           const [trip, provider] = await Promise.all([this.db.trips.get(commission.tripId), this.db.providers.get(commission.providerId)]);
-          if (!trip) throw new Error('commission trip not found');
-          if (!provider) throw new Error('commission provider not found');
+          if (!trip && !(await this.db.deletedRecordReferences.get(`trip:${commission.tripId}`))) throw new Error('commission trip not found');
+          if (!provider && !(await this.db.deletedRecordReferences.get(`provider:${commission.providerId}`))) throw new Error('commission provider not found');
           await this.db.commissions.put(commission);
         },
         putPayment: async (payment) => {
-          if (!(await this.db.trips.get(payment.tripId))) throw new Error('payment trip not found');
+          await assertNotDeleted('payment', payment.id);
+          if (!(await this.db.trips.get(payment.tripId)) && !(await this.db.deletedRecordReferences.get(`trip:${payment.tripId}`))) throw new Error('payment trip not found');
           await this.db.payments.put(payment);
         },
         putTask: async (task) => {
+          await assertNotDeleted('task', task.id);
           const component = task.serviceProviderId ? await this.db.serviceProviders.get(task.serviceProviderId) : undefined;
-          const [lead, trip, service, commission] = await Promise.all([task.leadId ? this.db.leads.get(task.leadId) : undefined, task.tripId ? this.db.trips.get(task.tripId) : undefined, component ? this.db.services.get(component.serviceId) : undefined, task.commissionId ? this.db.commissions.get(task.commissionId) : undefined]);
-          assertTaskReference(task, lead, trip, service, commission);
+          const [lead, trip, service, commission, deletedLead, deletedTrip, deletedService, deletedCommission] = await Promise.all([task.leadId ? this.db.leads.get(task.leadId) : undefined, task.tripId ? this.db.trips.get(task.tripId) : undefined, component ? this.db.services.get(component.serviceId) : undefined, task.commissionId ? this.db.commissions.get(task.commissionId) : undefined, task.leadId ? this.db.deletedRecordReferences.get(`lead:${task.leadId}`) : undefined, task.tripId ? this.db.deletedRecordReferences.get(`trip:${task.tripId}`) : undefined, component ? this.db.deletedRecordReferences.get(`service:${component.serviceId}`) : undefined, task.commissionId ? this.db.deletedRecordReferences.get(`commission:${task.commissionId}`) : undefined]);
+          assertTaskReference(task, Boolean(lead || deletedLead), Boolean(trip || deletedTrip), service, commission, Boolean(service || deletedService), Boolean(commission || deletedCommission));
           await this.db.tasks.put(task);
         },
         putConfiguration: async (configuration) => { await this.db.configurations.put(configuration); },
+        putDeletedRecordReference: async (reference) => { await this.db.deletedRecordReferences.put(reference); },
         putEvents: async (events) => {
           for (const event of events) {
             assertEvent(event);
@@ -249,7 +265,17 @@ export class DexieWorkspaceRepository implements WorkspaceRepository {
             await this.db.activityEvents.put(event);
           }
         },
-        deleteRecord: async (target: ManagedRecordRef) => {
+        deleteRecord: async (target: ManagedRecordRef, options: RecordDeleteOptions = {}) => {
+          const impact = await tx.getRecordImpact(target);
+          if (options.expectedFingerprint && options.expectedFingerprint !== impact.fingerprint) throw new Error('record impact changed; review the deletion again');
+          const task = target.kind === 'task' ? await this.db.tasks.get(target.id) : undefined;
+          const automationKey = task?.source === 'commission_follow_up' && task.commissionId ? `commission-follow-up:${task.commissionId}` : undefined;
+          const reference: DeletedRecordReference = { key: `${target.kind}:${target.id}`, kind: target.kind, id: target.id, displayLabel: impact.title, deletedAt: new Date().toISOString(), eventDisposition: options.removeOwnEvents ? 'deleted' : 'kept', ...(automationKey ? { automationKey } : {}) };
+          await this.db.deletedRecordReferences.put(reference);
+          if (options.removeOwnEvents) {
+            const events = await this.db.activityEvents.filter((event) => event.aggregateType === target.kind && event.aggregateId === target.id).toArray();
+            await this.db.activityEvents.bulkDelete(events.map((event) => event.id));
+          }
           if (target.kind === 'lead') { await this.db.leads.delete(target.id); return; }
           if (target.kind === 'client') { await this.db.clients.delete(target.id); return; }
           if (target.kind === 'trip') { await this.db.trips.delete(target.id); return; }

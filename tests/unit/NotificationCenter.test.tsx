@@ -31,4 +31,16 @@ describe('NotificationCenter', () => {
     expect(screen.getByRole('heading', { name: 'Active alerts' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Overdue task: Confirmar itinerario' })).toBeTruthy();
   });
+
+  it('closes the notification panel when the operator clicks outside it', async () => {
+    const user = userEvent.setup();
+    render(<><NotificationCenter notifications={[]} onOpen={vi.fn()} /><button type="button">Otro campo</button></>);
+
+    await user.click(screen.getByRole('button', { name: 'Notificaciones (0)' }));
+    expect(screen.getByRole('region', { name: 'Notificaciones' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Otro campo' }));
+
+    expect(screen.queryByRole('region', { name: 'Notificaciones' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Otro campo' }));
+  });
 });

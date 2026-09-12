@@ -25,7 +25,7 @@ import { DetailWorkspace } from "../design/components/DetailWorkspace";
 import { ResizableDetailPanel } from "../design/components/ResizableDetailPanel";
 import { ToastRegion } from "../design/components/ToastRegion";
 import { EmptyState } from "../design/components/EmptyState";
-import { LeadList } from "../features/leads/LeadList";
+import { LeadList, type LeadListFilters } from "../features/leads/LeadList";
 import { workspaceRepository } from "./workspace";
 import { createLead as createLeadOperation } from "../application/use-cases/createLead";
 import { updateLead as updateLeadOperation } from "../application/use-cases/updateLead";
@@ -63,6 +63,7 @@ import type {
   CatalogEntry,
   Client,
   Commission,
+  DeletedRecordReference,
   Currency,
   Lead,
   LeadStatus,
@@ -89,6 +90,7 @@ import {
 } from "../features/clients/ClientForm";
 import { TripList } from "../features/trips/TripList";
 import type { TripWorkspaceDraft } from "../features/trips/TripDetail";
+import { resolveRecordReference } from '../domain/recordReference';
 import type { CustomerPaymentComponent } from "../features/trips/CustomerPaymentPanel";
 import type {
   ProviderAssignmentResult,
@@ -119,8 +121,10 @@ import {
   type WorkspaceNotification,
 } from "../features/notifications/notificationModel";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { DataBackupsPage } from "../features/data/DataBackupsPage";
 import { createDefaultWorkspaceConfiguration } from "../domain/workspaceConfiguration";
 import { workspaceSnapshotVersion } from "../application/workspaceSnapshot";
+import { buildRevision } from './buildRevision';
 import "../design/global.css";
 
 const icons: Record<RouteKey, typeof Home> = {
@@ -138,9 +142,7 @@ const icons: Record<RouteKey, typeof Home> = {
 const TripDetail = lazy(async () => ({
   default: (await import("../features/trips/TripDetail")).TripDetail,
 }));
-const DataBackupsPage = lazy(async () => ({
-  default: (await import("../features/data/DataBackupsPage")).DataBackupsPage,
-}));
+export const defaultUpdatePromptReofferMs = 60 * 60 * 1000;
 type UndoArchiveToast = Readonly<{
   kind:
     | "lead"
@@ -177,25 +179,90 @@ export function App({
   applyUpdate,
   onDeferUpdate,
   requiresBackupForUpdate = false,
+  updatePromptReofferMs = defaultUpdatePromptReofferMs,
+  updateVersion = 0,
 }: {
   repository?: WorkspaceRepository;
   applyUpdate?: () => Promise<void>;
   onDeferUpdate?: () => void;
   requiresBackupForUpdate?: boolean;
+  updatePromptReofferMs?: number;
+  updateVersion?: number;
 }) {
   const repository = repositoryOverride ?? workspaceRepository;
   const [locale, setLocale] = useState<Locale>("es");
+  const [isApplyingUpdate, setIsApplyingUpdate] = useState(false);
+  const [updateError, setUpdateError] = useState<string | undefined>();
+  const [deferredUpdateVersion, setDeferredUpdateVersion] = useState<number | undefined>();
+  const isUpdateDeferred = deferredUpdateVersion === updateVersion;
   const [configuration, setConfiguration] = useState<WorkspaceConfiguration>(
     () => createDefaultWorkspaceConfiguration(),
   );
-  const [route, setRouteState] = useState<RouteKey>(() => routeFromHash());
-  const restoredContextHash = useRef<string | undefined>(undefined);
-  const setRoute = (nextRoute: RouteKey, recordId?: string): void => {
-    setRouteState(nextRoute);
-    if (globalThis.location && globalThis.location.hash !== routeHash(nextRoute, recordId)) globalThis.location.hash = routeHash(nextRoute, recordId);
+  const settingsNavigationGuard = useRef<((proceed: () => void) => void) | undefined>(undefined);
+  const applyAvailableUpdate = async (): Promise<void> => {
+    if (!applyUpdate || isApplyingUpdate) return;
+    setUpdateError(undefined);
+    setIsApplyingUpdate(true);
+    try {
+      await applyUpdate();
+    } catch {
+      setUpdateError(t('updateCouldNotBeApplied', locale));
+    } finally {
+      setIsApplyingUpdate(false);
+    }
+  };
+  const requestUpdate = (): void => {
+    const apply = () => { void applyAvailableUpdate(); };
+    if (settingsNavigationGuard.current) {
+      settingsNavigationGuard.current(apply);
+      return;
+    }
+    apply();
   };
   useEffect(() => {
-    const synchronizeRoute = () => setRouteState(routeFromHash());
+    if (!applyUpdate || !isUpdateDeferred) return;
+    const reoffer = globalThis.setTimeout(() => setDeferredUpdateVersion(undefined), updatePromptReofferMs);
+    return () => globalThis.clearTimeout(reoffer);
+  }, [applyUpdate, isUpdateDeferred, updatePromptReofferMs]);
+  const [route, setRouteState] = useState<RouteKey>(() => routeFromHash());
+  const restoredContextHash = useRef<string | undefined>(undefined);
+  const currentRoute = useRef(route);
+  currentRoute.current = route;
+  const acceptedNavigationHash = useRef<string | undefined>(undefined);
+  const setRoute = (nextRoute: RouteKey, recordId?: string): void => {
+    const proceed = () => {
+      setRouteState(nextRoute);
+      if (globalThis.location && globalThis.location.hash !== routeHash(nextRoute, recordId)) globalThis.location.hash = routeHash(nextRoute, recordId);
+    };
+    if (route === 'settings' && nextRoute !== 'settings' && settingsNavigationGuard.current) {
+      settingsNavigationGuard.current(() => {
+        settingsNavigationGuard.current = undefined;
+        proceed();
+      });
+      return;
+    }
+    proceed();
+  };
+  useEffect(() => {
+    const synchronizeRoute = () => {
+      const targetHash = globalThis.location?.hash ?? '';
+      const targetRoute = routeFromHash(targetHash);
+      if (acceptedNavigationHash.current === targetHash) {
+        acceptedNavigationHash.current = undefined;
+        setRouteState(targetRoute);
+        return;
+      }
+      if (currentRoute.current === 'settings' && targetRoute !== 'settings' && settingsNavigationGuard.current) {
+        globalThis.history.replaceState(undefined, '', routeHash('settings'));
+        settingsNavigationGuard.current(() => {
+          settingsNavigationGuard.current = undefined;
+          acceptedNavigationHash.current = targetHash;
+          if (globalThis.location && globalThis.location.hash !== targetHash) globalThis.location.hash = targetHash;
+        });
+        return;
+      }
+      setRouteState(targetRoute);
+    };
     if (globalThis.location && !globalThis.location.hash) globalThis.history.replaceState(undefined, '', routeHash('dashboard'));
     globalThis.addEventListener('hashchange', synchronizeRoute);
     return () => globalThis.removeEventListener('hashchange', synchronizeRoute);
@@ -221,6 +288,9 @@ export function App({
     readonly import("../domain/types").ProviderTaskTemplate[]
   >([]);
   const [showLeadForm, setShowLeadForm] = useState(false);
+  const [leadArchiveFilter, setLeadArchiveFilter] = useState<'active' | 'archived' | 'all'>('active');
+  const [leadFilters, setLeadFilters] = useState<LeadListFilters>({ query: "", source: "", status: "" });
+  const [leadReturnFocusId, setLeadReturnFocusId] = useState<string | undefined>();
   const [selectedLead, setSelectedLead] = useState<Lead | undefined>();
   const [editingLead, setEditingLead] = useState<Lead | undefined>();
   const [isLeadWorkspace, setIsLeadWorkspace] = useState(false);
@@ -271,11 +341,22 @@ export function App({
   const [calendarServiceProviders, setCalendarServiceProviders] = useState<
     readonly ServiceProvider[]
   >([]);
+  const [calendarPayments, setCalendarPayments] = useState<readonly Payment[]>([]);
   const [backupDownloads, setBackupDownloads] = useState<
     readonly BackupDownload[]
   >([]);
   const [workspaceNotes, setWorkspaceNotes] = useState<readonly RichNote[]>([]);
+  const [deletedRecordReferences, setDeletedRecordReferences] = useState<readonly DeletedRecordReference[]>([]);
   const activeLabel = (key: RouteKey) => t(key as TranslationKey, locale);
+
+  useEffect(() => {
+    if (route !== "leads" || isLeadWorkspace || !leadReturnFocusId) return undefined;
+    const frame = globalThis.requestAnimationFrame(() => {
+      document.getElementById(`lead-list-record-${leadReturnFocusId}`)?.focus();
+      setLeadReturnFocusId(undefined);
+    });
+    return () => globalThis.cancelAnimationFrame(frame);
+  }, [isLeadWorkspace, leadReturnFocusId, route]);
 
   useEffect(() => {
     const loadWorkspace = async () => {
@@ -317,9 +398,19 @@ export function App({
       setConfiguration(storedConfiguration);
       setLocale(storedConfiguration.locale);
       setWorkspaceNotes(snapshot.notes);
+      setDeletedRecordReferences(snapshot.deletedRecordReferences);
+      setCalendarServices(snapshot.services);
+      setCalendarServiceProviders(snapshot.serviceProviders);
+      setCalendarPayments(snapshot.payments);
     };
     void loadWorkspace();
   }, [repository]);
+  async function refreshCalendarWorkspace(): Promise<void> {
+    const snapshot = await repository.snapshot();
+    setCalendarServices(snapshot.services);
+    setCalendarServiceProviders(snapshot.serviceProviders);
+    setCalendarPayments(snapshot.payments);
+  }
   // The hash is an external navigation source; rerunning only on loaded records
   // prevents reopening a workspace after every local detail refresh.
   useEffect(() => {
@@ -396,15 +487,6 @@ export function App({
       setSelectedTasks(tasks);
     });
   }, [repository, selectedLead]);
-  useEffect(() => {
-    if (!undoArchiveToast) return;
-    const timeoutId = window.setTimeout(
-      () => setUndoArchiveToast(undefined),
-      5000,
-    );
-    return () => window.clearTimeout(timeoutId);
-  }, [undoArchiveToast]);
-
   async function saveConfiguration(
     nextConfiguration: WorkspaceConfiguration,
   ): Promise<void> {
@@ -585,9 +667,11 @@ export function App({
 
   async function deleteClient(
     target: import("../application/recordImpact").ManagedRecordRef,
+    options: import("../application/recordImpact").RecordDeleteOptions = {},
   ): Promise<void> {
-    await deleteRecordOperation(repository, target);
+    await deleteRecordOperation(repository, target, options);
     setClients(await repository.listClients());
+    setDeletedRecordReferences(await repository.listDeletedRecordReferences());
     setSelectedClient(undefined);
     setIsClientWorkspace(false);
   }
@@ -700,6 +784,7 @@ export function App({
         }),
       });
     }
+    if (target.kind === "service" || target.kind === "payment") await refreshCalendarWorkspace();
   }
 
   async function undoArchive(): Promise<void> {
@@ -743,6 +828,7 @@ export function App({
         ),
       );
     }
+    if (target.kind === "service" || target.kind === "payment") await refreshCalendarWorkspace();
     setUndoArchiveToast(undefined);
   }
 
@@ -787,12 +873,15 @@ export function App({
         ),
       );
     }
+    if (target.kind === "service" || target.kind === "payment") await refreshCalendarWorkspace();
   }
 
   async function deleteManagedRecord(
     target: import("../application/recordImpact").ManagedRecordRef,
+    options: import("../application/recordImpact").RecordDeleteOptions = {},
   ): Promise<void> {
-    await deleteRecordOperation(repository, target);
+    await deleteRecordOperation(repository, target, options);
+    setDeletedRecordReferences(await repository.listDeletedRecordReferences());
     if (target.kind === "lead") {
       setLeads(await repository.listLeads());
       setSelectedLead(undefined);
@@ -837,6 +926,7 @@ export function App({
         setIsPaymentWorkspace(false);
       }
     }
+    if (target.kind === "service" || target.kind === "payment") await refreshCalendarWorkspace();
   }
 
   function editLead(
@@ -950,9 +1040,9 @@ export function App({
     setAllTasks(await repository.listTasks());
   }
 
-  async function completeWorkspaceTask(taskId: string): Promise<Task> {
+  async function completeWorkspaceTask(taskId: string): Promise<void> {
     const timestamp = new Date().toISOString();
-    const result = await completeTaskOperation(repository, {
+    await completeTaskOperation(repository, {
       taskId,
       occurredAt: timestamp,
       recordedAt: timestamp,
@@ -960,7 +1050,6 @@ export function App({
     const tasks = await repository.listTasks();
     setAllTasks(tasks);
     setSelectedTask(tasks.find((task) => task.id === taskId));
-    return result.task;
   }
 
   async function reopenWorkspaceTask(taskId: string): Promise<void> {
@@ -1137,9 +1226,8 @@ export function App({
   ): Promise<void> {
     if (!selectedTrip || !selectedService) return;
     const client = clients.find((item) => item.id === selectedTrip.clientId);
-    if (!client) return;
     await saveTripWorkspace({
-      client,
+      ...(client ? { client } : {}),
       trip: selectedTrip,
       services: selectedTripServices.map((service) =>
         service.id === selectedService.id ? { ...service, ...value } : service,
@@ -1170,6 +1258,7 @@ export function App({
       recordedAt,
     });
     await loadTripWorkspace(selectedTrip);
+    await refreshCalendarWorkspace();
   }
 
   async function correctCustomerPayment(
@@ -1188,6 +1277,7 @@ export function App({
       recordedAt,
     });
     await loadTripWorkspace(selectedTrip);
+    await refreshCalendarWorkspace();
     setSelectedPayment(
       (await repository.listPaymentsForTrip(selectedTrip.id)).find(
         (payment) => payment.id === input.paymentId,
@@ -1276,6 +1366,7 @@ export function App({
       recordedAt: timestamp,
     });
     await loadTripWorkspace(selectedTrip);
+    await refreshCalendarWorkspace();
   }
 
   function openClient(client: Client): void {
@@ -1359,6 +1450,14 @@ export function App({
     );
   }
 
+  const selectedTripClient = selectedTrip
+    ? resolveRecordReference(clients, deletedRecordReferences, 'client', selectedTrip.clientId)
+    : undefined;
+  const selectedTripClientLabel = selectedTripClient?.state === 'live'
+    ? selectedTripClient.record.name
+    : selectedTripClient?.state === 'deleted'
+      ? t('deletedRecordReference', locale, { record: selectedTripClient.reference.displayLabel })
+      : t('unnamedClient', locale);
   const tripWorkspace = selectedTrip ? (
     <>
       {!isTripWorkspace && (
@@ -1380,13 +1479,8 @@ export function App({
         }
       >
         <TripDetail
-          client={
-            clients.find((client) => client.id === selectedTrip.clientId) ?? {
-              id: selectedTrip.clientId,
-              name: "",
-              createdAt: selectedTrip.createdAt,
-            }
-          }
+          client={selectedTripClient?.state === 'live' ? selectedTripClient.record : undefined}
+          historicalClientReference={selectedTripClient?.state === 'deleted' ? selectedTripClient.reference : undefined}
           key={`${selectedTrip.id}:${selectedTrip.status}:${selectedTripServices.map((service) => `${service.id}-${service.archivedAt ?? ""}`).join("|")}:${selectedTripPayments.map((payment) => `${payment.id}-${payment.archivedAt ?? ""}`).join("|")}`}
           notes={selectedTripNotes}
           events={selectedTripEvents}
@@ -1398,6 +1492,7 @@ export function App({
             setIsTripWorkspace(false);
           }}
           onCreateSuggestedTasks={createSuggestedTasks}
+          onCompleteTask={(taskId) => { void completeWorkspaceTask(taskId); }}
           onCancelTrip={cancelSelectedTrip}
           onEnableCommission={enableComponentCommission}
           onRecordComponentCancellation={recordComponentCancellation}
@@ -1410,6 +1505,7 @@ export function App({
             setIsServiceWorkspace(true);
           }}
           onReactivateProvider={reactivateProvider}
+          onRescheduleTask={rescheduleWorkspaceTask}
           onCorrectPayment={correctCustomerPayment}
           onRecordPayment={recordCustomerPayment}
           onSave={saveTripWorkspace}
@@ -1426,12 +1522,8 @@ export function App({
                 name: service.name || t("unnamed", locale),
               })}
               loadImpact={loadRecordImpact}
-              onArchive={(target) => {
-                void archiveManagedRecord(target);
-              }}
-              onDelete={(target) => {
-                void deleteManagedRecord(target);
-              }}
+              onArchive={archiveManagedRecord}
+              onDelete={deleteManagedRecord}
               onRestore={(target) => {
                 void restoreManagedRecord(target);
               }}
@@ -1443,12 +1535,8 @@ export function App({
               archived={Boolean(payment.archivedAt)}
               label={t("recordActionsPayment", locale, { id: payment.id })}
               loadImpact={loadRecordImpact}
-              onArchive={(target) => {
-                void archiveManagedRecord(target);
-              }}
-              onDelete={(target) => {
-                void deleteManagedRecord(target);
-              }}
+              onArchive={archiveManagedRecord}
+              onDelete={deleteManagedRecord}
               onRestore={(target) => {
                 void restoreManagedRecord(target);
               }}
@@ -1459,17 +1547,11 @@ export function App({
             <RecordActions
               archived={Boolean(selectedTrip.archivedAt)}
               label={t("recordActionsTrip", locale, {
-                name:
-                  clients.find((client) => client.id === selectedTrip.clientId)
-                    ?.name ?? t("unnamedClient", locale),
+                name: selectedTripClientLabel,
               })}
               loadImpact={loadRecordImpact}
-              onArchive={(target) => {
-                void archiveManagedRecord(target);
-              }}
-              onDelete={(target) => {
-                void deleteManagedRecord(target);
-              }}
+              onArchive={archiveManagedRecord}
+              onDelete={deleteManagedRecord}
               onRestore={(target) => {
                 void restoreManagedRecord(target);
               }}
@@ -1506,12 +1588,8 @@ export function App({
               name: editingProvider.name || t("unnamed", locale),
             })}
             loadImpact={loadRecordImpact}
-            onArchive={(target) => {
-              void archiveManagedRecord(target);
-            }}
-            onDelete={(target) => {
-              void deleteManagedRecord(target);
-            }}
+            onArchive={archiveManagedRecord}
+            onDelete={deleteManagedRecord}
             onRestore={(target) => {
               void restoreManagedRecord(target);
             }}
@@ -1531,26 +1609,16 @@ export function App({
       title={selectedTask.title}
     >
       <TaskDetail
-        onComplete={(taskId) => {
-          void completeWorkspaceTask(taskId);
-        }}
-        onReopen={(taskId) => {
-          void reopenWorkspaceTask(taskId);
-        }}
-        onReschedule={(taskId, dueOn) => {
-          void rescheduleWorkspaceTask(taskId, dueOn);
-        }}
+        onComplete={completeWorkspaceTask}
+        onReopen={reopenWorkspaceTask}
+        onReschedule={rescheduleWorkspaceTask}
         recordActions={
           <RecordActions
             archived={Boolean(selectedTask.archivedAt)}
             label={`${t("task", locale)}: ${selectedTask.title}`}
             loadImpact={loadRecordImpact}
-            onArchive={(target) => {
-              void archiveManagedRecord(target);
-            }}
-            onDelete={(target) => {
-              void deleteManagedRecord(target);
-            }}
+            onArchive={archiveManagedRecord}
+            onDelete={deleteManagedRecord}
             onRestore={(target) => {
               void restoreManagedRecord(target);
             }}
@@ -1566,8 +1634,7 @@ export function App({
       <DetailWorkspace
         breadcrumb={[
           t("trips", locale),
-          clients.find((client) => client.id === selectedTrip.clientId)?.name ??
-            t("trip", locale),
+          selectedTripClientLabel,
           selectedService.name,
         ]}
         onClose={() => {
@@ -1585,12 +1652,8 @@ export function App({
                 name: selectedService.name,
               })}
               loadImpact={loadRecordImpact}
-              onArchive={(target) => {
-                void archiveManagedRecord(target);
-              }}
-              onDelete={(target) => {
-                void deleteManagedRecord(target);
-              }}
+              onArchive={archiveManagedRecord}
+              onDelete={deleteManagedRecord}
               onRestore={(target) => {
                 void restoreManagedRecord(target);
               }}
@@ -1606,8 +1669,7 @@ export function App({
       <DetailWorkspace
         breadcrumb={[
           t("trips", locale),
-          clients.find((client) => client.id === selectedTrip.clientId)?.name ??
-            t("trip", locale),
+          selectedTripClientLabel,
           t("payment", locale),
         ]}
         onClose={() => {
@@ -1626,12 +1688,8 @@ export function App({
                 id: selectedPayment.id,
               })}
               loadImpact={loadRecordImpact}
-              onArchive={(target) => {
-                void archiveManagedRecord(target);
-              }}
-              onDelete={(target) => {
-                void deleteManagedRecord(target);
-              }}
+              onArchive={archiveManagedRecord}
+              onDelete={deleteManagedRecord}
               onRestore={(target) => {
                 void restoreManagedRecord(target);
               }}
@@ -1646,28 +1704,40 @@ export function App({
         />
       </DetailWorkspace>
     ) : undefined;
+  const selectedCommissionProvider = selectedCommission
+    ? resolveRecordReference(providers, deletedRecordReferences, 'provider', selectedCommission.providerId)
+    : undefined;
+  const selectedCommissionTrip = selectedCommission
+    ? resolveRecordReference(trips, deletedRecordReferences, 'trip', selectedCommission.tripId)
+    : undefined;
+  const selectedCommissionProviderLabel = selectedCommissionProvider?.state === 'live'
+    ? selectedCommissionProvider.record.name
+    : selectedCommissionProvider?.state === 'deleted'
+      ? t('deletedRecordReference', locale, { record: selectedCommissionProvider.reference.displayLabel })
+      : t('noProvider', locale);
+  const selectedCommissionTripLabel = selectedCommissionTrip?.state === 'live'
+    ? t('trip', locale)
+    : selectedCommissionTrip?.state === 'deleted'
+      ? t('deletedRecordReference', locale, { record: selectedCommissionTrip.reference.displayLabel })
+      : t('trip', locale);
   const commissionWorkspace = selectedCommission ? (
     <DetailWorkspace
       breadcrumb={[
         t("commissions", locale),
-        providers.find(
-          (provider) => provider.id === selectedCommission.providerId,
-        )?.name ?? t("commission", locale),
+        selectedCommissionProviderLabel,
       ]}
       onClose={() => {
         setIsCommissionWorkspace(false);
         setSelectedCommission(undefined);
       }}
       title={
-        providers.find(
-          (provider) => provider.id === selectedCommission.providerId,
-        )?.name ?? t("commission", locale)
+        selectedCommissionProviderLabel
       }
     >
       <CommissionDetail
         commission={selectedCommission}
         onMarkPaid={setCommissionToPay}
-        onOpenProvider={() => {
+        onOpenProvider={selectedCommissionProvider?.state === 'live' ? () => {
           const provider = providers.find(
             (item) => item.id === selectedCommission.providerId,
           );
@@ -1680,38 +1750,28 @@ export function App({
           void repository
             .listProviderTaskTemplates(provider.id)
             .then(setEditingProviderTemplates);
-        }}
-        onOpenTrip={() => {
+        } : undefined}
+        onOpenTrip={selectedCommissionTrip?.state === 'live' ? () => {
           const trip = trips.find((item) => item.id === selectedCommission.tripId);
           if (!trip) return;
           setSelectedCommission(undefined);
           setIsCommissionWorkspace(false);
           setRoute("trips");
           void openTrip(trip);
-        }}
+        } : undefined}
         onUpdateProjectionRate={updateCommissionProjectionRate}
         onUpdateTracking={updateCommissionTracking}
-        providerName={
-          providers.find(
-            (provider) => provider.id === selectedCommission.providerId,
-          )?.name ?? t("noProvider", locale)
-        }
+        providerName={selectedCommissionProviderLabel}
+        tripName={selectedCommissionTripLabel}
         recordActions={
           <RecordActions
             archived={Boolean(selectedCommission.archivedAt)}
             label={t("recordActionsCommission", locale, {
-              provider:
-                providers.find(
-                  (provider) => provider.id === selectedCommission.providerId,
-                )?.name ?? t("noProvider", locale),
+              provider: selectedCommissionProviderLabel,
             })}
             loadImpact={loadRecordImpact}
-            onArchive={(target) => {
-              void archiveManagedRecord(target);
-            }}
-            onDelete={(target) => {
-              void deleteManagedRecord(target);
-            }}
+            onArchive={archiveManagedRecord}
+            onDelete={deleteManagedRecord}
             onRestore={(target) => {
               void restoreManagedRecord(target);
             }}
@@ -1727,7 +1787,9 @@ export function App({
       <Page title={activeLabel(route)}>
         <Dashboard
           backupDownloads={backupDownloads}
+          clients={clients}
           commissions={commissions}
+          deletedReferences={deletedRecordReferences}
           leads={leads}
           onCompleteTask={(taskId) => {
             void completeWorkspaceTask(taskId);
@@ -1754,6 +1816,7 @@ export function App({
           }}
           serviceProviders={calendarServiceProviders}
           services={calendarServices}
+          payments={calendarPayments}
           tasks={allTasks}
           today={new Date().toISOString().slice(0, 10)}
           trips={trips}
@@ -1766,6 +1829,8 @@ export function App({
         <CalendarPage
           clients={clients}
           commissions={commissions}
+          deletedReferences={deletedRecordReferences}
+          payments={calendarPayments}
           onOpenClient={(clientId) => {
             const client = clients.find((item) => item.id === clientId);
             if (client) {
@@ -1897,12 +1962,8 @@ export function App({
                       name: selectedLead.name || t("unnamed", locale),
                     })}
                     loadImpact={loadRecordImpact}
-                    onArchive={(target) => {
-                      void archiveManagedRecord(target);
-                    }}
-                    onDelete={(target) => {
-                      void deleteManagedRecord(target);
-                    }}
+                    onArchive={archiveManagedRecord}
+                    onDelete={deleteManagedRecord}
                     onEdit={editLead}
                     onRestore={(target) => {
                       void restoreManagedRecord(target);
@@ -1938,7 +1999,10 @@ export function App({
                     void rescheduleSelectedTask(taskId, dueOn);
                   }}
                   tasks={selectedTasks}
-                  onOpenWorkspace={() => setIsLeadWorkspace(true)}
+                  onOpenWorkspace={() => {
+                    setLeadReturnFocusId(selectedLead.id);
+                    setIsLeadWorkspace(true);
+                  }}
                   recordActions={
                     <RecordActions
                       archived={Boolean(selectedLead.archivedAt)}
@@ -1946,12 +2010,8 @@ export function App({
                         name: selectedLead.name || t("unnamed", locale),
                       })}
                       loadImpact={loadRecordImpact}
-                      onArchive={(target) => {
-                        void archiveManagedRecord(target);
-                      }}
-                      onDelete={(target) => {
-                        void deleteManagedRecord(target);
-                      }}
+                      onArchive={archiveManagedRecord}
+                      onDelete={deleteManagedRecord}
                       onEdit={editLead}
                       onRestore={(target) => {
                         void restoreManagedRecord(target);
@@ -1970,6 +2030,8 @@ export function App({
                   .filter((entry) => entry.active)
                   .map((entry) => entry.label)}
                 editingLead={editingLead}
+                archiveFilter={leadArchiveFilter}
+                filters={leadFilters}
                 leads={leads}
                 locale={locale}
                 showForm={showLeadForm}
@@ -1977,6 +2039,8 @@ export function App({
                   setEditingLead(undefined);
                   setShowLeadForm(false);
                 }}
+                onArchiveFilterChange={setLeadArchiveFilter}
+                onFiltersChange={setLeadFilters}
                 onSave={(value) => {
                   void saveLead(value);
                 }}
@@ -1999,6 +2063,8 @@ export function App({
                 .filter((entry) => entry.active)
                 .map((entry) => entry.label)}
               editingLead={editingLead}
+              archiveFilter={leadArchiveFilter}
+              filters={leadFilters}
               leads={leads}
               locale={locale}
               showForm={showLeadForm}
@@ -2006,6 +2072,8 @@ export function App({
                 setEditingLead(undefined);
                 setShowLeadForm(false);
               }}
+              onArchiveFilterChange={setLeadArchiveFilter}
+              onFiltersChange={setLeadFilters}
               onSave={(value) => {
                 void saveLead(value);
               }}
@@ -2061,12 +2129,8 @@ export function App({
                       name: selectedClient.name || t("unnamed", locale),
                     })}
                     loadImpact={loadRecordImpact}
-                    onArchive={(target) => {
-                      void archiveClient(target);
-                    }}
-                    onDelete={(target) => {
-                      void deleteClient(target);
-                    }}
+                    onArchive={archiveClient}
+                    onDelete={deleteClient}
                     onEdit={editClient}
                     onRestore={(target) => {
                       void restoreClient(target);
@@ -2120,12 +2184,8 @@ export function App({
                         name: selectedClient.name || t("unnamed", locale),
                       })}
                       loadImpact={loadRecordImpact}
-                      onArchive={(target) => {
-                        void archiveClient(target);
-                      }}
-                      onDelete={(target) => {
-                        void deleteClient(target);
-                      }}
+                      onArchive={archiveClient}
+                      onDelete={deleteClient}
                       onEdit={editClient}
                       onRestore={(target) => {
                         void restoreClient(target);
@@ -2180,13 +2240,11 @@ export function App({
           <DetailWorkspace
             breadcrumb={[
               t("trips", locale),
-              clients.find((client) => client.id === selectedTrip.clientId)
-                ?.name ?? t("trip", locale),
+              selectedTripClientLabel,
             ]}
             onClose={() => setIsTripWorkspace(false)}
             title={
-              clients.find((client) => client.id === selectedTrip.clientId)
-                ?.name ?? t("trip", locale)
+              selectedTripClientLabel
             }
           >
             {tripWorkspace}
@@ -2195,6 +2253,7 @@ export function App({
           <ResizableDetailPanel panel={tripWorkspace}>
             <TripList
               clients={clients}
+              deletedReferences={deletedRecordReferences}
               onSelect={(trip) => {
                 void openTrip(trip);
               }}
@@ -2204,6 +2263,7 @@ export function App({
         ) : (
           <TripList
             clients={clients}
+            deletedReferences={deletedRecordReferences}
             onSelect={(trip) => {
               void openTrip(trip);
             }}
@@ -2228,8 +2288,7 @@ export function App({
           </DetailWorkspace>
         ) : (
           <>
-            <div className="page-heading">
-              <h1>{activeLabel(route)}</h1>
+            <div className="page-actions">
               <Button
                 onClick={() => {
                   setEditingProvider(undefined);
@@ -2279,18 +2338,16 @@ export function App({
           taskWorkspace
         ) : (
           <TaskBoard
+            clients={clients}
             commissions={commissions}
+            deletedReferences={deletedRecordReferences}
             leads={leads}
             loadImpact={loadRecordImpact}
-            onArchive={(target) => {
-              void archiveManagedRecord(target);
-            }}
+            onArchive={archiveManagedRecord}
             onComplete={completeWorkspaceTask}
-            onCreate={(value) => { void createWorkspaceTask(value); }}
-            onDelete={(target) => {
-              void deleteManagedRecord(target);
-            }}
-            onEdit={(taskId, value) => { void updateWorkspaceTask(taskId, value); }}
+            onCreate={createWorkspaceTask}
+            onDelete={deleteManagedRecord}
+            onEdit={updateWorkspaceTask}
             onOpenWorkspace={(task) => {
               setSelectedTask(task);
               setIsTaskWorkspace(true);
@@ -2300,9 +2357,7 @@ export function App({
             onRestore={(target) => {
               void restoreManagedRecord(target);
             }}
-            onReschedule={(taskId, dueOn) => {
-              void rescheduleWorkspaceTask(taskId, dueOn);
-            }}
+            onReschedule={rescheduleWorkspaceTask}
             tasks={allTasks}
             today={new Date().toISOString().slice(0, 10)}
             trips={trips}
@@ -2320,13 +2375,10 @@ export function App({
         ) : (
           <CommissionBoard
             commissions={commissions}
+            deletedReferences={deletedRecordReferences}
             loadImpact={loadRecordImpact}
-            onArchive={(target) => {
-              void archiveManagedRecord(target);
-            }}
-            onDelete={(target) => {
-              void deleteManagedRecord(target);
-            }}
+            onArchive={archiveManagedRecord}
+            onDelete={deleteManagedRecord}
             onMarkPaid={setCommissionToPay}
             onOpenWorkspace={(commission) => {
               setSelectedCommission(commission);
@@ -2361,6 +2413,14 @@ export function App({
       <Page title={activeLabel(route)}>
         <SettingsPage
           configuration={configuration}
+          onNavigationGuardChange={(guard) => {
+            settingsNavigationGuard.current = guard
+              ? (proceed) => guard(() => {
+                  settingsNavigationGuard.current = undefined;
+                  proceed();
+                })
+              : undefined;
+          }}
           onSave={saveConfiguration}
         />
       </Page>
@@ -2369,6 +2429,7 @@ export function App({
   const notifications = buildWorkspaceNotifications({
     backupDownloads,
     commissions,
+    payments: calendarPayments,
     serviceProviders: calendarServiceProviders,
     services: calendarServices,
     tasks: allTasks,
@@ -2388,7 +2449,7 @@ export function App({
   const hasEligibleJsonBackup = hasCurrentJsonBackup(backupDownloads, workspaceSnapshotVersion, latestWorkspaceChangeAt);
   return (
     <LocaleProvider locale={locale}>
-      <div className="app-shell">
+      <div className="app-shell" data-build-revision={buildRevision}>
         <aside className="sidebar">
           <div className="wordmark">
             <img
@@ -2437,6 +2498,7 @@ export function App({
               <GlobalSearch
                 clients={clients}
                 commissions={commissions}
+                deletedReferences={deletedRecordReferences}
                 leads={leads}
                 notes={workspaceNotes}
                 onSelect={openSearchResult}
@@ -2471,27 +2533,33 @@ export function App({
               </label>
             </div>
           </header>
-          {applyUpdate && (
+          {applyUpdate && !isUpdateDeferred && (
             <section className="update-prompt" role="status">
               <span>{t("updateAvailable", locale)}</span>
               <button
                 className="secondary-button"
-                onClick={onDeferUpdate}
+                onClick={() => {
+                  setUpdateError(undefined);
+                  setDeferredUpdateVersion(updateVersion);
+                  onDeferUpdate?.();
+                }}
                 type="button"
               >
                 {t("later", locale)}
               </button>
               <button
                 className="primary-button"
-                disabled={requiresBackupForUpdate && !hasEligibleJsonBackup}
+                disabled={isApplyingUpdate || (requiresBackupForUpdate && !hasEligibleJsonBackup)}
                 onClick={() => {
-                  void applyUpdate();
+                  void requestUpdate();
                 }}
                 type="button"
               >
                 {t("updateNow", locale)}
               </button>
-              {requiresBackupForUpdate && !hasEligibleJsonBackup && <span className="form-error">{t('updateBackupRequired', locale)}</span>}
+               {requiresBackupForUpdate && !hasEligibleJsonBackup && <span className="form-error">{t('updateBackupRequired', locale)}</span>}
+               {requiresBackupForUpdate && !hasEligibleJsonBackup && <button className="secondary-button" onClick={() => setRoute('data')} type="button">{t('goToBackup', locale)}</button>}
+               {updateError && <span className="form-error" role="alert">{updateError}</span>}
             </section>
           )}
           <div className="content">{page}</div>
@@ -2499,6 +2567,7 @@ export function App({
             <ToastRegion
               actionLabel={t("undo", locale)}
               message={undoArchiveToast.message}
+              onDismiss={() => setUndoArchiveToast(undefined)}
               onAction={() => {
                 void undoArchive();
               }}

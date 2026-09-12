@@ -28,8 +28,10 @@ export async function reconcileWorkspace(repository: WorkspaceRepository, comman
       if (!commission || commission.status !== 'expected' || !commission.dueOn || commission.dueOn >= command.today) continue;
       const existing = (await tx.listTasksForTrip(commission.tripId)).some((task) => task.source === 'commission_follow_up' && task.commissionId === commission.id);
       if (existing) continue;
+      const taskId = `commission-follow-up:${commission.id}`;
+      if (await tx.getDeletedRecordReference(`task:${taskId}`)) continue;
       const task = {
-        id: `commission-follow-up:${commission.id}`,
+        id: taskId,
         title: command.commissionFollowUpTitle,
         required: false,
         dueOn: commission.dueOn,

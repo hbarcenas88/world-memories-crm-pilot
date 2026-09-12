@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { ActivityEvent, BackupDownload, Client, Commission, Lead, Payment, Provider, ProviderTaskTemplate, RichNote, Service, ServiceAdditionalItem, ServiceProvider, Task, Trip, WorkspaceConfiguration } from '../../domain/types';
+import type { ActivityEvent, BackupDownload, Client, Commission, DeletedRecordReference, Lead, Payment, Provider, ProviderTaskTemplate, RichNote, Service, ServiceAdditionalItem, ServiceProvider, Task, Trip, WorkspaceConfiguration } from '../../domain/types';
 
 export class WorldMemoriesDb extends Dexie {
   leads!: Table<Lead, string>;
@@ -17,6 +17,7 @@ export class WorldMemoriesDb extends Dexie {
   activityEvents!: Table<ActivityEvent, string>;
   backupDownloads!: Table<BackupDownload, string>;
   configurations!: Table<WorkspaceConfiguration, string>;
+  deletedRecordReferences!: Table<DeletedRecordReference, string>;
 
   constructor(name = 'world-memories-crm') {
     super(name);
@@ -109,6 +110,19 @@ export class WorldMemoriesDb extends Dexie {
       services: 'id,tripId,status,startOn,endOn,createdAt,archivedAt', providers: 'id,status,createdAt,archivedAt', serviceProviders: 'id,serviceId,providerId,currency,createdAt', serviceAdditionalItems: 'id,serviceId,currency,createdAt',
       providerTaskTemplates: 'id,providerId,active,createdAt', commissions: 'id,tripId,providerId,status,dueOn,paidOn,createdAt,archivedAt', notes: 'id,[ownerType+ownerId],updatedAt',
       tasks: 'id,status,dueOn,leadId,tripId,serviceProviderId,createdAt,archivedAt', payments: 'id,tripId,status,occurredAt,recordedAt,archivedAt', activityEvents: 'id,aggregateType,aggregateId,type,occurredAt', backupDownloads: 'id,kind,downloadedAt', configurations: 'id,updatedAt',
+    });
+    this.version(14).stores({
+      leads: 'id,status,createdAt,clientId,tripId,archivedAt', clients: 'id,createdAt,lastSavedAt,archivedAt', trips: 'id,leadId,clientId,status,createdAt,effectiveStartOn,effectiveEndOn,lastSavedAt,archivedAt',
+      services: 'id,tripId,status,startOn,endOn,createdAt,archivedAt', providers: 'id,status,createdAt,archivedAt', serviceProviders: 'id,serviceId,providerId,currency,createdAt', serviceAdditionalItems: 'id,serviceId,currency,createdAt',
+      providerTaskTemplates: 'id,providerId,active,createdAt', commissions: 'id,tripId,providerId,status,dueOn,paidOn,createdAt,archivedAt', notes: 'id,[ownerType+ownerId],updatedAt',
+      tasks: 'id,status,dueOn,leadId,tripId,serviceProviderId,createdAt,archivedAt', payments: 'id,tripId,status,occurredAt,recordedAt,archivedAt', activityEvents: 'id,aggregateType,aggregateId,type,occurredAt', backupDownloads: 'id,kind,downloadedAt', configurations: 'id,updatedAt', deletedRecordReferences: 'key,kind,deletedAt',
+    });
+    // v14 was already exercised. Keep its primary key and add this lookup additively.
+    this.version(15).stores({
+      leads: 'id,status,createdAt,clientId,tripId,archivedAt', clients: 'id,createdAt,lastSavedAt,archivedAt', trips: 'id,leadId,clientId,status,createdAt,effectiveStartOn,effectiveEndOn,lastSavedAt,archivedAt',
+      services: 'id,tripId,status,startOn,endOn,createdAt,archivedAt', providers: 'id,status,createdAt,archivedAt', serviceProviders: 'id,serviceId,providerId,currency,createdAt', serviceAdditionalItems: 'id,serviceId,currency,createdAt',
+      providerTaskTemplates: 'id,providerId,active,createdAt', commissions: 'id,tripId,providerId,status,dueOn,paidOn,createdAt,archivedAt', notes: 'id,[ownerType+ownerId],updatedAt',
+      tasks: 'id,status,dueOn,leadId,tripId,serviceProviderId,createdAt,archivedAt', payments: 'id,tripId,status,occurredAt,recordedAt,archivedAt', activityEvents: 'id,aggregateType,aggregateId,type,occurredAt', backupDownloads: 'id,kind,downloadedAt', configurations: 'id,updatedAt', deletedRecordReferences: 'key,kind,deletedAt,automationKey',
     });
   }
 

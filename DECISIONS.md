@@ -1,5 +1,15 @@
 # Registro de decisiones
 
+## DEC-185 — Aclaración de eliminación y confirmaciones posteriores al piloto
+
+- **Fecha:** 2026-09-05.
+- **Fuente:** instrucción explícita de la usuaria durante la auditoría visual del piloto; no inferida de una captura.
+- **Decisión de comportamiento confirmada:** permitir solicitar eliminación incluso con relaciones. Archivar sigue siendo la recomendación cuando existe impacto, no un sustituto silencioso. Mostrar identidad y consecuencias concretas de registros y eventos afectados, con detalle accesible más allá de conteos; exigir una nueva confirmación antes del borrado. Ofrecer eliminar también los eventos propios como opción explícita, no obligatoria. No borrar los demás registros relacionados automáticamente; si se confirma el borrado, los relacionados pueden conservar una referencia histórica incongruente y el diálogo debe advertirlo expresamente.
+- **Protección de cambios accidentales:** las salidas de edición o de un formulario sucio deben pedir una decisión explícita y alineada con la identidad visual: continuar editando, descartar, o guardar cuando sea posible. No se pedirán confirmaciones decorativas para navegación limpia ni para acciones reversibles ya cubiertas por Deshacer.
+- **Precedencia:** sustituye la restricción de DEC-179 y REQ-RF-003 que impedía toda eliminación con dependencias, incluidos eventos. Esas redacciones se mantienen como histórico hasta actualizar sus contratos durante la implementación; no deben dirigir el nuevo comportamiento.
+- **Confirmaciones:** proteger salida con cambios pendientes y acciones de riesgo mediante guardar/descartar/seguir editando o confirmación específica, con identidad visual común. No forzar confirmaciones para filtros, búsquedas o navegación sin borrador. El cierre de pestaña usa el diálogo nativo permitido por el navegador.
+- **Implementación:** en curso el 2026-09-05: el flujo resume dependencias concretas, recomienda archivar, pide doble confirmación y permite eliminar opcionalmente solo los eventos propios. La eliminación crea dentro de la misma transacción una referencia histórica mínima explícita (`kind:id`, etiqueta conservada, fecha y disposición de eventos) para que los registros relacionados no se vuelvan inválidos en el respaldo; IndexedDB v14 y JSON v3 la preservan. Aún falta cerrar las superficies de lectura de esa referencia, la protección contra reutilización manual de un ID eliminado y la verificación transversal del plan de cierre visual. Esta decisión no autoriza usar datos reales.
+
 ## DEC-001 — Puerta de aprobación previa a implementación
 
 - **Fecha:** 2026-07-12

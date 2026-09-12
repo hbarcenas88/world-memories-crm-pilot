@@ -34,7 +34,7 @@ describe('archiveRecord', () => {
 });
 
 describe('deleteRecord', () => {
-  it('keeps a Client intact when a Lead still depends on it', async () => {
+  it('allows an informed deletion with relationships while retaining related records', async () => {
     const repository = new MemoryWorkspaceRepository();
     await repository.seedClient({ id: 'client-1', name: 'Familia prueba', createdAt: '2026-08-29T08:00:00.000Z' });
     await repository.transact((transaction) => transaction.putLead({
@@ -47,11 +47,44 @@ describe('deleteRecord', () => {
       createdAt: '2026-08-29T08:05:00.000Z',
     }));
 
-    await expect(deleteRecord(repository, { kind: 'client', id: 'client-1' }))
-      .rejects.toThrow('record has dependent relationships');
+    await deleteRecord(repository, { kind: 'client', id: 'client-1' });
 
-    await expect(repository.getClient('client-1')).resolves.toMatchObject({ name: 'Familia prueba' });
+    await expect(repository.getClient('client-1')).resolves.toBeUndefined();
     await expect(repository.getLead('lead-1')).resolves.toMatchObject({ clientId: 'client-1' });
+    expect((await repository.snapshot()).deletedRecordReferences).toEqual([
+      expect.objectContaining({ key: 'client:client-1', kind: 'client', id: 'client-1', displayLabel: 'Familia prueba', eventDisposition: 'kept' }),
+    ]);
+  });
+
+  it('removes only its own activity events when explicitly requested', async () => {
+    const repository = new MemoryWorkspaceRepository({
+      id: 'lead-1', name: 'Consulta de prueba', acquisitionSource: 'Web', requestedDateStatus: 'dates_to_define', status: 'contacted', createdAt: '2026-08-29T08:00:00.000Z',
+    });
+    await repository.transact((transaction) => transaction.putEvents([{ id: 'event-1', aggregateType: 'lead', aggregateId: 'lead-1', type: 'lead_created', occurredAt: '2026-08-29T08:00:00.000Z', recordedAt: '2026-08-29T08:00:00.000Z', payload: {} }]));
+
+    await deleteRecord(repository, { kind: 'lead', id: 'lead-1' }, { removeOwnEvents: true });
+
+    expect((await repository.snapshot()).events).toHaveLength(0);
+    expect((await repository.snapshot()).deletedRecordReferences).toEqual([
+      expect.objectContaining({ key: 'lead:lead-1', eventDisposition: 'deleted' }),
+    ]);
+  });
+
+  it('rejects a deletion confirmation when the displayed impact is stale', async () => {
+    const repository = new MemoryWorkspaceRepository({ id: 'lead-1', name: 'Consulta de prueba', acquisitionSource: 'Web', requestedDateStatus: 'dates_to_define', status: 'contacted', createdAt: '2026-08-29T08:00:00.000Z' });
+    const impact = await repository.transact((transaction) => transaction.getRecordImpact({ kind: 'lead', id: 'lead-1' }));
+    await repository.transact((transaction) => transaction.putTask({ id: 'task-1', title: 'Seguimiento', required: false, status: 'open', leadId: 'lead-1', createdAt: '2026-08-29T08:01:00.000Z' }));
+
+    await expect(deleteRecord(repository, { kind: 'lead', id: 'lead-1' }, { expectedFingerprint: impact.fingerprint })).rejects.toThrow('record impact changed');
+    await expect(repository.getLead('lead-1')).resolves.toBeDefined();
+  });
+
+  it('does not let a direct write silently reuse an ID deliberately deleted from history', async () => {
+    const repository = new MemoryWorkspaceRepository({ id: 'lead-1', name: 'Consulta de prueba', acquisitionSource: 'Web', requestedDateStatus: 'dates_to_define', status: 'contacted', createdAt: '2026-08-29T08:00:00.000Z' });
+    await deleteRecord(repository, { kind: 'lead', id: 'lead-1' });
+
+    await expect(repository.transact((transaction) => transaction.putLead({ id: 'lead-1', name: 'Consulta nueva', acquisitionSource: 'Web', requestedDateStatus: 'dates_to_define', status: 'contacted', createdAt: '2026-08-29T08:00:00.000Z' }))).rejects.toThrow('cannot be reused');
+    await expect(repository.getLead('lead-1')).resolves.toBeUndefined();
   });
 });
 

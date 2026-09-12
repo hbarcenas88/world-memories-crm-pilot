@@ -12,8 +12,10 @@ test('saves one client-trip workspace and lets the operator close it without a s
   await page.getByRole('button', { name: 'Preparar cotización' }).click();
   await page.getByRole('button', { name: 'Marcar cotización enviada' }).click();
   await page.getByRole('button', { name: 'Registrar primer pago' }).click();
+  await page.getByRole('button', { name: 'Siguiente' }).click();
   await page.getByLabel('Anticipo').fill('250');
   await page.getByLabel('Moneda').last().selectOption('USD');
+  await page.getByRole('button', { name: 'Siguiente' }).click();
   await page.getByRole('button', { name: 'Confirmar venta' }).click();
 
   await page.getByRole('button', { name: 'Viajes' }).click();
@@ -55,6 +57,7 @@ test('saves one client-trip workspace and lets the operator close it without a s
   await page.getByLabel('Importe del pago de Hotel familiar').fill('200');
   await page.getByRole('textbox', { name: 'Fecha efectiva del pago de Hotel familiar' }).fill('12/11/2026');
   await page.getByRole('button', { name: 'Registrar pago de Hotel familiar' }).click();
+  await page.getByRole('button', { name: 'Confirmar registro de pago' }).click();
   await expect(page.getByText('Total pagado: 450.00 USD')).toBeVisible();
 
   await page.getByRole('button', { name: 'Comisiones' }).click();

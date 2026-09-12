@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 
 const storageKey = 'wm.detailPanelWidth';
-const defaultWidth = 420;
+const defaultWidth = 350;
 const minimumWidth = 320;
 const maximumWidth = 560;
 

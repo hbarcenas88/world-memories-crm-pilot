@@ -22,6 +22,16 @@ describe('CalendarPage', () => {
     expect(screen.getByRole('heading', { name: 'Planificación y agenda' })).toBeTruthy();
   });
 
+  it('explains the customer due-date filter without making a claim when a balance cannot be calculated', async () => {
+    const user = userEvent.setup();
+    render(<CalendarPage clients={[]} commissions={[]} onOpenClient={vi.fn()} onOpenCommission={vi.fn()} onOpenTask={vi.fn()} onOpenTrip={vi.fn()} services={[]} serviceProviders={[]} tasks={[]} today="2026-09-01" trips={[]} />);
+
+    await user.click(screen.getByRole('button', { name: 'Filtrar calendario' }));
+    const help = screen.getByRole('button', { name: 'Ayuda sobre vencimientos de cliente' });
+    await user.click(help);
+    expect(screen.getByRole('tooltip').textContent).toContain('El saldo solo se calcula');
+  });
+
   it('opens the contextual side panel with only relevant record routes after one click', async () => {
     const user = userEvent.setup();
     const onOpenTrip = vi.fn();
@@ -38,6 +48,16 @@ describe('CalendarPage', () => {
     expect(onOpenTrip).toHaveBeenCalledWith('trip-1');
     await user.click(screen.getByRole('button', { name: 'Abrir cliente' }));
     expect(onOpenClient).toHaveBeenCalledWith('client-1');
+  });
+
+  it('keeps a deleted Client explicit on a surviving Trip and does not offer a broken Client route', async () => {
+    const user = userEvent.setup();
+    render(<CalendarPage clients={[]} commissions={[]} deletedReferences={[{ key: 'client:client-deleted', kind: 'client', id: 'client-deleted', displayLabel: 'Familia histórica', deletedAt: '2026-09-07T10:00:00.000Z', eventDisposition: 'kept' }]} onOpenClient={vi.fn()} onOpenCommission={vi.fn()} onOpenTask={vi.fn()} onOpenTrip={vi.fn()} services={[]} serviceProviders={[]} tasks={[]} today="2026-09-01" trips={[{ id: 'trip-historical', leadId: 'lead-1', clientId: 'client-deleted', status: 'active', createdAt: '2026-08-20T00:00:00.000Z', effectiveStartOn: '2026-09-10', effectiveEndOn: '2026-09-16' }]} />);
+
+    await user.click(screen.getAllByRole('button', { name: 'Viaje de Registro eliminado: Familia histórica: 10/09/2026–16/09/2026' })[0]);
+    expect(screen.getByRole('complementary', { name: 'Detalle del calendario' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Abrir viaje' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Abrir cliente' })).toBeNull();
   });
 
   it('translates Calendar controls and dates to English without translating an entered task title', async () => {

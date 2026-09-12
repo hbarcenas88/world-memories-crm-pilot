@@ -15,8 +15,10 @@ test('projects a trip in the calendar and opens its contextual panel with one cl
   await page.getByRole('button', { name: 'Preparar cotización' }).click();
   await page.getByRole('button', { name: 'Marcar cotización enviada' }).click();
   await page.getByRole('button', { name: 'Registrar primer pago' }).click();
+  await page.getByRole('button', { name: 'Siguiente' }).click();
   await page.getByLabel('Anticipo').fill('250');
   await page.getByLabel('Moneda').last().selectOption('USD');
+  await page.getByRole('button', { name: 'Siguiente' }).click();
   await page.getByRole('button', { name: 'Confirmar venta' }).click();
   await page.getByRole('button', { name: 'Viajes' }).click();
   await page.getByRole('button', { name: /Familia calendario/ }).click();

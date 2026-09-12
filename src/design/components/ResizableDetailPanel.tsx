@@ -2,6 +2,7 @@ import { RotateCcw } from 'lucide-react';
 import { useRef, type PointerEvent, type ReactNode } from 'react';
 import { t, useLocale } from '../../app/i18n';
 import { usePanelWidth } from '../hooks/usePanelWidth';
+import { IconButton } from './IconButton';
 
 type ResizableDetailPanelProps = Readonly<{
   children: ReactNode;
@@ -46,6 +47,6 @@ export function ResizableDetailPanel({ children, panel }: ResizableDetailPanelPr
         adjustFromKeyboard(event.key);
       }
     }} onPointerDown={startDrag} onPointerMove={drag} onPointerUp={endDrag} role="separator" tabIndex={0} />
-    <div className="resizable-workbench-panel"><div className="detail-panel-controls"><button aria-label={t('resetPanelWidth', locale)} className="icon-button" onClick={reset} type="button"><RotateCcw aria-hidden="true" size={17} /></button></div>{panel}</div>
+    <div className="resizable-workbench-panel"><div className="detail-panel-controls"><IconButton label={t('resetPanelWidth', locale)} onClick={reset}><RotateCcw aria-hidden="true" size={17} /></IconButton></div>{panel}</div>
   </div>;
 }

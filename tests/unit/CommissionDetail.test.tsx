@@ -26,6 +26,21 @@ describe('CommissionDetail', () => {
     expect(onOpenProvider).toHaveBeenCalledOnce();
   });
 
+  it('shows a historical relation as context without exposing an inert navigation action', () => {
+    render(<CommissionDetail
+      commission={{ id: 'commission-historical', tripId: 'trip-deleted', providerId: 'provider-deleted', expected: { amount: 100, currency: 'USD' }, status: 'expected', createdAt: '2026-08-20T00:00:00.000Z' }}
+      onMarkPaid={vi.fn()}
+      onUpdateTracking={vi.fn()}
+      providerName="Registro eliminado: Hotel histórico"
+      tripName="Registro eliminado: Viaje histórico"
+    />);
+
+    expect(screen.getByText('Registro eliminado: Hotel histórico')).toBeTruthy();
+    expect(screen.getByText('Registro eliminado: Viaje histórico')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Abrir viaje' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Abrir proveedor' })).toBeNull();
+  });
+
   it('lets the user set one Commission projection rate or explicitly return it to the Trip rate', async () => {
     const user = userEvent.setup();
     const onUpdateProjectionRate = vi.fn();

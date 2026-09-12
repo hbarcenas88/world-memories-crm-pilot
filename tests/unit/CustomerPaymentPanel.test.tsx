@@ -7,6 +7,26 @@ import { CustomerPaymentPanel } from '../../src/features/trips/CustomerPaymentPa
 afterEach(cleanup);
 
 describe('CustomerPaymentPanel', () => {
+  it('formats a new customer payment while recording its unlocalized amount', async () => {
+    const user = userEvent.setup();
+    const onRecordPayment = vi.fn().mockResolvedValue(undefined);
+    render(<CustomerPaymentPanel
+      components={[{ id: 'component-1', serviceName: 'Hotel familiar', providerName: 'Hotel Aurora', currency: 'USD', saleAmount: 1500 }]}
+      onRecordPayment={onRecordPayment}
+      payments={[]}
+    />);
+
+    await user.type(screen.getByLabelText('Importe del pago de Hotel familiar'), '1234.5');
+
+    expect((screen.getByLabelText('Importe del pago de Hotel familiar') as HTMLInputElement).value).toBe('1,234.5');
+
+    fireEvent.change(screen.getByLabelText('Fecha efectiva del pago de Hotel familiar'), { target: { value: '12/11/2026' } });
+    await user.click(screen.getByRole('button', { name: 'Registrar pago de Hotel familiar' }));
+    await user.click(screen.getByRole('button', { name: 'Confirmar registro de pago' }));
+
+    expect(onRecordPayment).toHaveBeenCalledWith({ serviceProviderId: 'component-1', amount: { amount: 1234.5, currency: 'USD' }, occurredOn: '2026-11-12' });
+  });
+
   it('derives the component balance, exposes due reminders and records the effective payment date', async () => {
     const user = userEvent.setup();
     const onRecordPayment = vi.fn().mockResolvedValue(undefined);
@@ -23,6 +43,13 @@ describe('CustomerPaymentPanel', () => {
     await user.type(screen.getByLabelText('Importe del pago de Hotel familiar'), '200');
     fireEvent.change(screen.getByLabelText('Fecha efectiva del pago de Hotel familiar'), { target: { value: '12/11/2026' } });
     await user.click(screen.getByRole('button', { name: 'Registrar pago de Hotel familiar' }));
+
+    expect(screen.getByRole('dialog', { name: 'Confirmar registro de pago' })).toBeTruthy();
+    expect(onRecordPayment).not.toHaveBeenCalled();
+    await user.keyboard('{Escape}');
+    expect((screen.getByLabelText('Importe del pago de Hotel familiar') as HTMLInputElement).value).toBe('200.00');
+    await user.click(screen.getByRole('button', { name: 'Registrar pago de Hotel familiar' }));
+    await user.click(screen.getByRole('button', { name: 'Confirmar registro de pago' }));
 
     expect(onRecordPayment).toHaveBeenCalledWith({ serviceProviderId: 'component-1', amount: { amount: 200, currency: 'USD' }, occurredOn: '2026-11-12' });
   });
@@ -59,8 +86,34 @@ describe('CustomerPaymentPanel', () => {
     await user.type(screen.getByLabelText('Corrección de importe payment-1'), '275');
     fireEvent.change(screen.getByLabelText('Corrección de fecha payment-1'), { target: { value: '21/08/2026' } });
     await user.click(screen.getByRole('button', { name: 'Guardar corrección de payment-1' }));
+    expect(screen.getByRole('dialog', { name: 'Confirmar corrección de pago' })).toBeTruthy();
+    expect(onCorrectPayment).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Confirmar corrección de pago' }));
 
     expect(onCorrectPayment).toHaveBeenCalledWith({ paymentId: 'payment-1', amount: { amount: 275, currency: 'USD' }, occurredOn: '2026-08-21' });
+  });
+
+  it('formats a payment correction while retaining its unlocalized amount', async () => {
+    const user = userEvent.setup();
+    const onCorrectPayment = vi.fn().mockResolvedValue(undefined);
+    render(<CustomerPaymentPanel
+      components={[{ id: 'component-1', serviceName: 'Hotel familiar', providerName: 'Hotel Aurora', currency: 'USD', saleAmount: 1500 }]}
+      onCorrectPayment={onCorrectPayment}
+      onRecordPayment={vi.fn().mockResolvedValue(undefined)}
+      payments={[{ id: 'payment-1', tripId: 'trip-1', serviceProviderId: 'component-1', amount: { amount: 250, currency: 'USD' }, occurredAt: '2026-08-20T12:00:00.000Z', recordedAt: '2026-08-20T12:00:00.000Z', status: 'received', source: 'customer_payment' }]}
+    />);
+
+    await user.click(screen.getByRole('button', { name: 'Editar pago: payment-1' }));
+    await user.clear(screen.getByLabelText('Corrección de importe payment-1'));
+    await user.type(screen.getByLabelText('Corrección de importe payment-1'), '1234.5');
+
+    expect((screen.getByLabelText('Corrección de importe payment-1') as HTMLInputElement).value).toBe('1,234.5');
+
+    fireEvent.change(screen.getByLabelText('Corrección de fecha payment-1'), { target: { value: '21/08/2026' } });
+    await user.click(screen.getByRole('button', { name: 'Guardar corrección de payment-1' }));
+    await user.click(screen.getByRole('button', { name: 'Confirmar corrección de pago' }));
+
+    expect(onCorrectPayment).toHaveBeenCalledWith({ paymentId: 'payment-1', amount: { amount: 1234.5, currency: 'USD' }, occurredOn: '2026-08-21' });
   });
 
   it('exposes the explicit commission enable action only for a component marked Sin comisión', async () => {
@@ -108,5 +161,16 @@ describe('CustomerPaymentPanel', () => {
     expect(screen.getByText('Internal reminders: 30/11/2026 · 23/12/2026 · 29/12/2026 · 30/12/2026')).toBeTruthy();
     expect(screen.getByLabelText('Payment amount for Hotel familiar')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Record payment for Hotel familiar' })).toBeTruthy();
+  });
+
+  it('does not add payments in different currencies into a component balance', () => {
+    render(<CustomerPaymentPanel
+      components={[{ id: 'component-1', serviceName: 'Hotel familiar', providerName: 'Hotel Aurora', currency: 'USD', saleAmount: 900 }]}
+      onRecordPayment={vi.fn().mockResolvedValue(undefined)}
+      payments={[{ id: 'payment-1', tripId: 'trip-1', serviceProviderId: 'component-1', amount: { amount: 250, currency: 'MXN' }, occurredAt: '2026-08-26T12:00:00.000Z', recordedAt: '2026-08-26T12:00:00.000Z', status: 'received', source: 'customer_payment' }]}
+    />);
+
+    expect(screen.getByText('Saldo pendiente no calculable: los pagos tienen otra moneda')).toBeTruthy();
+    expect(screen.queryByText('Saldo pendiente: 650.00 USD')).toBeNull();
   });
 });

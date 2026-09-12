@@ -7,6 +7,13 @@ import { ProviderList } from '../../src/features/providers/ProviderList';
 afterEach(cleanup);
 
 describe('ProviderList', () => {
+  it('offers manual creation in the empty state without promising a historical import', () => {
+    render(<ProviderList onSelect={vi.fn()} providers={[]} />);
+
+    expect(screen.getByText('Crea tu primer proveedor para registrar sus datos, reglas de comisión y plantillas de tareas.')).toBeTruthy();
+    expect(screen.queryByText(/histórico aprobado/i)).toBeNull();
+  });
+
   it('keeps archived providers accessible through the archive filter', async () => {
     const user = userEvent.setup();
     render(<ProviderList onSelect={vi.fn()} providers={[
@@ -19,6 +26,18 @@ describe('ProviderList', () => {
     await user.click(screen.getByRole('button', { name: 'Archivados' }));
     expect(screen.getByText('Hotel archivado')).toBeTruthy();
     expect(screen.getByText('Archivado')).toBeTruthy();
+  });
+
+  it('shows active and archived providers together through Todos', async () => {
+    const user = userEvent.setup();
+    render(<ProviderList onSelect={vi.fn()} providers={[
+      { id: 'active', name: 'Hotel activo', status: 'active', allowedCurrencies: ['USD'], createdAt: '2026-08-29T00:00:00.000Z' },
+      { id: 'archived', name: 'Hotel archivado', status: 'inactive', allowedCurrencies: ['USD'], createdAt: '2026-08-29T00:00:00.000Z', archivedAt: '2026-08-29T01:00:00.000Z' },
+    ]} />);
+
+    await user.click(screen.getByRole('button', { name: 'Todos' }));
+    expect(screen.getByText('Hotel activo')).toBeTruthy();
+    expect(screen.getByText('Hotel archivado')).toBeTruthy();
   });
 
   it('translates provider list headings and statuses into English', () => {
@@ -37,6 +56,7 @@ describe('ProviderList', () => {
       { id: 'tour', name: 'Aventura Viva', status: 'active', allowedCurrencies: ['USD'], serviceTypes: ['Actividades o tours'], createdAt: '2026-08-29T00:00:00.000Z' },
     ]} />);
 
+    await user.click(screen.getByRole('button', { name: 'Filtrar proveedores' }));
     await user.selectOptions(screen.getByLabelText('Tipo de servicio'), 'Hoteles');
     expect(screen.getByText('Hotel Aurora')).toBeTruthy();
     expect(screen.queryByText('Aventura Viva')).toBeNull();

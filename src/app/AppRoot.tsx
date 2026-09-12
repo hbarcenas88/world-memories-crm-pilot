@@ -4,6 +4,14 @@ import { App } from './App';
 
 export function AppRoot() {
   const [applyUpdate, setApplyUpdate] = useState<(() => Promise<void>)>();
-  useEffect(() => { registerPwa(setApplyUpdate); }, []);
-  return <App applyUpdate={applyUpdate} onDeferUpdate={() => setApplyUpdate(undefined)} requiresBackupForUpdate />;
+  const [requiresBackupForUpdate, setRequiresBackupForUpdate] = useState(true);
+  const [updateVersion, setUpdateVersion] = useState(0);
+  useEffect(() => {
+    return registerPwa((update, metadata) => {
+      setApplyUpdate(() => update);
+      setRequiresBackupForUpdate(metadata?.requiresBackup ?? true);
+      setUpdateVersion((current) => current + 1);
+    });
+  }, []);
+  return <App applyUpdate={applyUpdate} requiresBackupForUpdate={requiresBackupForUpdate} updateVersion={updateVersion} />;
 }

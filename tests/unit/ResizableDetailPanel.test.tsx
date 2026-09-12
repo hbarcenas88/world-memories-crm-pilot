@@ -10,15 +10,15 @@ describe('ResizableDetailPanel', () => {
     render(<ResizableDetailPanel panel={<aside>Detalle</aside>}><section>Lista</section></ResizableDetailPanel>);
     const separator = screen.getByRole('separator', { name: 'Ajustar ancho del panel de detalle' });
 
-    expect(separator.getAttribute('aria-valuenow')).toBe('420');
+    expect(separator.getAttribute('aria-valuenow')).toBe('350');
     fireEvent.keyDown(separator, { key: 'ArrowRight' });
-    expect(separator.getAttribute('aria-valuenow')).toBe('440');
-    expect(localStorage.getItem('wm.detailPanelWidth')).toBe('440');
+    expect(separator.getAttribute('aria-valuenow')).toBe('370');
+    expect(localStorage.getItem('wm.detailPanelWidth')).toBe('370');
 
     fireEvent.keyDown(separator, { key: 'End' });
     expect(separator.getAttribute('aria-valuenow')).toBe('560');
     fireEvent.click(screen.getByRole('button', { name: 'Restablecer ancho del panel' }));
-    expect(separator.getAttribute('aria-valuenow')).toBe('420');
+    expect(separator.getAttribute('aria-valuenow')).toBe('350');
     expect(localStorage.getItem('wm.detailPanelWidth')).toBeNull();
   });
 

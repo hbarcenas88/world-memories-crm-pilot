@@ -1,8 +1,9 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { App } from '../../src/app/App';
 import { MemoryWorkspaceRepository } from '../../src/test/memoryRepository';
+import { deleteRecord } from '../../src/application/use-cases/deleteRecord';
 
 describe('application shell', () => {
   afterEach(() => { cleanup(); globalThis.history.replaceState(undefined, '', '/'); });
@@ -85,6 +86,7 @@ describe('application shell', () => {
 
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Global settings' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Open Preferences and formats' }));
     expect(screen.getByText('Date: DD/MM/YYYY')).toBeTruthy();
   });
 
@@ -135,6 +137,26 @@ describe('application shell', () => {
     expect(screen.queryByRole('region', { name: 'Lista de viajes' })).toBeNull();
   });
 
+  it('keeps a surviving Trip operational with an explicit deleted Client reference and never recreates that Client', async () => {
+    const user = userEvent.setup();
+    const repository = new MemoryWorkspaceRepository({ id: 'lead-trip-historical', name: 'Consulta histórica', acquisitionSource: 'Web', requestedDateStatus: 'dates_to_define', status: 'sold', createdAt: '2026-09-07T10:00:00.000Z', clientId: 'client-trip-historical', tripId: 'trip-historical' });
+    await repository.seedClient({ id: 'client-trip-historical', name: 'Familia eliminada', createdAt: '2026-09-07T10:00:00.000Z' });
+    await repository.seedTrip({ id: 'trip-historical', leadId: 'lead-trip-historical', clientId: 'client-trip-historical', status: 'active', createdAt: '2026-09-07T10:00:00.000Z' });
+    await deleteRecord(repository, { kind: 'client', id: 'client-trip-historical' });
+    render(<App repository={repository} />);
+
+    await user.click(screen.getByRole('button', { name: 'Viajes' }));
+    await user.click(await screen.findByRole('button', { name: /Registro eliminado: Familia eliminada/ }));
+    const workspace = screen.getByRole('complementary', { name: 'Expediente de viaje' });
+    expect(within(workspace).getByRole('status').textContent).toBe('Registro eliminado: Familia eliminada');
+
+    fireEvent.change(within(workspace).getByLabelText('Inicio manual del viaje'), { target: { value: '15/10/2026' } });
+    await user.click(within(workspace).getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(async () => expect((await repository.snapshot()).trips.find((trip) => trip.id === 'trip-historical')?.overrideStartOn).toBe('2026-10-15'));
+    await expect(repository.getClient('client-trip-historical')).resolves.toBeUndefined();
+  });
+
   it('edits a Lead from its visible action menu and persists the correction', async () => {
     const user = userEvent.setup();
     const repository = new MemoryWorkspaceRepository({ id: 'lead-edit', name: 'Consulta inicial', acquisitionSource: 'Instagram', requestedDateStatus: 'dates_to_define', status: 'contacted', createdAt: '2026-08-29T00:00:00.000Z', destination: 'Orlando' });
@@ -158,7 +180,7 @@ describe('application shell', () => {
     await user.click(screen.getByRole('button', { name: 'Leads' }));
 
     await user.click(await screen.findByRole('button', { name: /Consulta ajustable/ }));
-    expect(screen.getByRole('separator', { name: 'Ajustar ancho del panel de detalle' }).getAttribute('aria-valuenow')).toBe('420');
+    expect(screen.getByRole('separator', { name: 'Ajustar ancho del panel de detalle' }).getAttribute('aria-valuenow')).toBe('350');
   });
 
   it('places the selected Client in the same keyboard-resizable detail panel', async () => {
@@ -249,7 +271,7 @@ describe('application shell', () => {
     await user.click(await screen.findByRole('button', { name: /Familia viajera/ }));
     await user.click(await screen.findByRole('button', { name: 'Acciones del viaje Familia viajera' }));
     await user.click(screen.getByRole('menuitem', { name: 'Archivar o eliminar' }));
-    await user.click(screen.getByRole('button', { name: 'Archivar' }));
+    await user.click(screen.getByRole('button', { name: 'Mejor archivar' }));
 
     expect((await screen.findByRole('status')).textContent).toContain('Viaje archivado');
     await user.click(screen.getByRole('button', { name: 'Deshacer' }));
@@ -357,9 +379,10 @@ describe('application shell', () => {
 
     expect(screen.getByRole('navigation', { name: 'Ruta del expediente' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Pago payment-workspace' })).toBeTruthy();
-    await user.clear(screen.getByRole('spinbutton', { name: 'Corrección de importe payment-workspace' }));
-    await user.type(screen.getByRole('spinbutton', { name: 'Corrección de importe payment-workspace' }), '225');
+    await user.clear(screen.getByLabelText('Corrección de importe payment-workspace'));
+    await user.type(screen.getByLabelText('Corrección de importe payment-workspace'), '225');
     await user.click(screen.getByRole('button', { name: 'Guardar corrección de payment-workspace' }));
+    await user.click(screen.getByRole('button', { name: 'Confirmar corrección de pago' }));
     await waitFor(async () => expect((await repository.snapshot()).payments).toContainEqual(expect.objectContaining({ id: 'payment-workspace', amount: { amount: 225, currency: 'USD' } })));
   });
 
@@ -415,6 +438,7 @@ describe('application shell', () => {
     await user.type(screen.getByLabelText('Corrección de importe payment-correct'), '225');
     fireEvent.change(screen.getByLabelText('Corrección de fecha payment-correct'), { target: { value: '21/08/2026' } });
     await user.click(screen.getByRole('button', { name: 'Guardar corrección de payment-correct' }));
+    await user.click(screen.getByRole('button', { name: 'Confirmar corrección de pago' }));
 
     await waitFor(async () => expect((await repository.snapshot()).payments).toContainEqual(expect.objectContaining({ id: 'payment-correct', amount: { amount: 225, currency: 'USD' }, occurredAt: '2026-08-21T12:00:00.000Z' })));
     expect((await repository.snapshot()).events).toContainEqual(expect.objectContaining({ aggregateType: 'payment', aggregateId: 'payment-correct', type: 'customer_payment_corrected' }));

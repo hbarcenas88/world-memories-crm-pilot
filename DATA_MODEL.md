@@ -131,13 +131,14 @@ Eventos mínimos propuestos:
 
 ## Persistencia local e integridad
 
-El MVP usa una única base IndexedDB. Sus colecciones separan entidades y relaciones de dominio: Clientes, miembros/viajeros, Leads, Viajes, vínculos Lead–Viaje, Servicios/Reservas, Proveedores de servicio, conceptos adicionales, Proveedores, Comisiones, Tareas, Notas, Eventos, plantillas, catálogos/configuración, lotes de importación y estado de notificaciones/respaldo.
+El MVP usa una única base IndexedDB. Sus colecciones separan entidades y relaciones de dominio: Clientes, miembros/viajeros, Leads, Viajes, vínculos Lead–Viaje, Servicios/Reservas, Proveedores de servicio, conceptos adicionales, Proveedores, Comisiones, Tareas, Notas, Eventos, plantillas, catálogos/configuración, lotes de importación, estado de notificaciones/respaldo y referencias históricas de registros eliminados.
 
 La interfaz no escribe directamente en estas colecciones. Cada acción de negocio se ejecuta mediante el contrato de persistencia aprobado en DEC-169 y confirma en una sola transacción todas las entidades afectadas y el Evento de actividad correspondiente. Ejemplo: al confirmar el primer pago exitoso, se guardan juntos el pago/componente, la transición del Lead a `Vendido`, los vínculos necesarios y el evento; si una validación o escritura falla, no queda una parte de la operación aplicada.
 
 Los índices y consultas se diseñan a partir de las relaciones, estados y fechas requeridas por las pantallas aprobadas; no son una segunda fuente de verdad ni alteran los datos originales. La versión de esquema se conserva dentro de la base y se migra según DEC-170.
 - Cambiar estatus registra el estado anterior y nuevo, sin duplicar datos personales.
 - El historial no se edita destructivamente; una corrección crea un evento trazable.
+- Una eliminación explícitamente confirmada no elimina en cascada los registros relacionados. Si existen relaciones, guarda una referencia histórica mínima del registro eliminado (tipo, ID, etiqueta, fecha y disposición de sus eventos propios) en la misma transacción; esa referencia permite explicar y validar el vínculo histórico sin recrear el registro borrado.
 
 ## Hitos y métricas derivadas
 

@@ -1,6 +1,7 @@
 import { Bell } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { t, useLocale } from '../../app/i18n';
+import { useDismissibleLayer } from '../../design/hooks/useDismissibleLayer';
 import type { WorkspaceNotification } from './notificationModel';
 
 type NotificationCenterProps = Readonly<{
@@ -19,8 +20,10 @@ export function NotificationCenter({ notifications, onOpen }: NotificationCenter
   const locale = useLocale();
   const [isOpen, setIsOpen] = useState(false);
   const label = t('notificationsWithCount', locale, { count: notifications.length });
+  const rootRef = useRef<HTMLElement>(null);
+  useDismissibleLayer({ isOpen, onDismiss: () => setIsOpen(false), rootRef });
 
-  return <section className="notification-center">
+  return <section className="notification-center" ref={rootRef}>
     <button aria-expanded={isOpen} className="icon-button notification-trigger" onClick={() => setIsOpen((current) => !current)} type="button"><Bell aria-hidden="true" size={21} /><span className="sr-only">{label}</span>{notifications.length > 0 && <span aria-hidden="true" className="notification-count">{notifications.length}</span>}</button>
     {isOpen && <section aria-label={t('notifications', locale)} className="notification-panel"><h2>{t('activeAlerts', locale)}</h2>{notifications.length === 0 ? <p className="muted-copy">{t('noPendingAlerts', locale)}</p> : <ul>{notifications.map((notification) => <li key={notification.id}><button onClick={() => onOpen(notification)} type="button">{notificationLabel(notification, locale)}</button></li>)}</ul>}</section>}
   </section>;

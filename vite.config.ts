@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react(), VitePWA({
     registerType: 'prompt',
     manifest: false,
-    workbox: { globPatterns: ['**/*.{js,css,html,svg,woff2}'], navigateFallback: 'index.html' },
+    workbox: { globPatterns: ['**/*.{js,css,html,svg,woff2}'], globIgnores: ['**/world-memories-update.json'], navigateFallback: 'index.html' },
   })],
   base: './',
   build: {

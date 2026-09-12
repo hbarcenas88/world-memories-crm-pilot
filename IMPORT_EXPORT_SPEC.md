@@ -89,6 +89,10 @@ El importador verifica formato, versión, fecha, presencia de archivos, checksum
 
 Hojas financieras pueden agregarse en un paquete separado (`finance-*`) si entran al alcance; no se mezclarán silenciosamente con el CRM.
 
+## Respaldo JSON vigente
+
+El respaldo completo vigente es `schemaVersion: 3`. Además de los datos operativos y la configuración, conserva `deletedRecordReferences` para una eliminación explícita de un registro con relaciones: `key` estable (`kind:id`), tipo, ID, etiqueta conservada, fecha y si se conservaron o eliminaron solo sus propios eventos. No representa una eliminación en cascada ni permite restaurar un registro borrado. La restauración acepta de manera aditiva los esquemas 1 y 2, que no incluyen esa colección, y valida que una relación apunte a un registro vivo o a una referencia histórica explícita, nunca a un ID huérfano.
+
 ## Grano candidato por archivo
 
 | Archivo | Una fila representa | Fuente principal | Bloqueo actual |

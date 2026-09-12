@@ -7,6 +7,16 @@ import { ClientForm } from '../../src/features/clients/ClientForm';
 afterEach(cleanup);
 
 describe('ClientForm', () => {
+  it('asks before cancelling a dirty client draft', async () => {
+    const user = userEvent.setup();
+    render(<ClientForm onCancel={vi.fn()} onSave={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('Nombre de cliente o familia'), 'Familia Rivera');
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }));
+
+    expect(screen.getByRole('dialog', { name: 'Cambios sin guardar' })).toBeTruthy();
+  });
+
   it('preloads and saves editable family details and existing members', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
@@ -36,6 +46,18 @@ describe('ClientForm', () => {
     await user.click(screen.getByRole('button', { name: 'Guardar cliente' }));
     expect(onSave.mock.calls[0][0].members[0]).toMatchObject({ name: 'Lucía', birthDate: '2017-08-15', status: 'active' });
     expect(onSave.mock.calls[0][0].members[0]).not.toHaveProperty('age');
+  });
+
+  it('does not save a client with an invalid email', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(<ClientForm onCancel={vi.fn()} onSave={onSave} />);
+
+    await user.type(screen.getByLabelText('Correo'), 'familia@');
+    await user.click(screen.getByRole('button', { name: 'Guardar cliente' }));
+
+    expect(screen.getByRole('alert').textContent).toBe('Indica un correo válido o déjalo vacío.');
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it('translates form controls without changing entered family values', () => {
